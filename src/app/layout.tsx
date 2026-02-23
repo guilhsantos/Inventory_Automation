@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-// IMPORTANTE: Importando o provedor que criamos
 import { AuthProvider } from "@/lib/auth-context";
+import Header from "@/components/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,13 +26,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-br">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {/* O AuthProvider deve envolver o children para que todas as páginas 
-            saibam quem é o usuário e qual o seu cargo (role) */}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50/50`}>
         <AuthProvider>
-          {children}
+          <Header />
+          <main>
+            {children}
+          </main>
         </AuthProvider>
       </body>
     </html>
