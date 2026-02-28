@@ -1,21 +1,26 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Forçamos o fundo branco e texto preto para evitar o Dark Mode automático */
 :root {
-  --background: #ffffff;
-  --foreground: #111827; /* Cinza quase preto */
+  --branco: #FFFFFF;
+  --roxo-medio: #5D286C;
+  --roxo-vivo: #7B1470;
+  --ameixa-escuro: #44213F;
+  --grafite: #262626;
 }
 
 body {
-  background-color: white !important;
-  color: #111827;
-  font-family: Arial, sans-serif;
+  background-color: var(--branco);
+  color: var(--grafite);
+  font-family: sans-serif;
 }
 
-/* Remove qualquer interferência de cores do sistema */
+/* Forçamos a remoção de qualquer modo escuro automático */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #ffffff;
-    --foreground: #111827;
+  body {
+    background-color: var(--branco);
+    color: var(--grafite);
   }
 }
