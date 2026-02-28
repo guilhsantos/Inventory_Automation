@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { CheckCircle2, Laptop, Loader2, AlertCircle, Keyboard } from "lucide-react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
@@ -29,15 +29,28 @@ export default function ScannerPage() {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const playSuccess = () => {
-    const audio = new Audio('/success.mp3');
-    audio.play().catch(() => console.warn("Audio success.mp3 não encontrado."));
-  };
+  // --- Refs para Áudio (Evita delay ao instanciar novo áudio) ---
+  const audioSuccess = useRef<HTMLAudioElement | null>(null);
+  const audioError = useRef<HTMLAudioElement | null>(null);
 
-  const playError = () => {
-    const audio = new Audio('/error.mp3');
-    audio.play().catch(() => console.warn("Audio error.mp3 não encontrado."));
-  };
+  useEffect(() => {
+    audioSuccess.current = new Audio('/success.mp3');
+    audioError.current = new Audio('/error.mp3');
+  }, []);
+
+  const playSuccess = useCallback(() => {
+    if (audioSuccess.current) {
+      audioSuccess.current.currentTime = 0;
+      audioSuccess.current.play().catch(() => {});
+    }
+  }, []);
+
+  const playError = useCallback(() => {
+    if (audioError.current) {
+      audioError.current.currentTime = 0;
+      audioError.current.play().catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     setIsMobile(/Android|iPhone/i.test(navigator.userAgent));
@@ -48,7 +61,7 @@ export default function ScannerPage() {
   }, [isMobile, scanResult]);
 
   const handleIdentifyItem = async (codigo: string) => {
-    if (!codigo.trim()) return;
+    if (!codigo.trim() || isSearching) return;
 
     setError(null);
     setItemInfo(null);
@@ -63,27 +76,29 @@ export default function ScannerPage() {
         .eq('codigo_unico', codigo)
         .single();
 
-      const timeoutPromise = new Promise<{data: null, error: Error}>((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout: O Supabase não respondeu em 15s.")), 15000)
+      const timeoutPromise = new Promise<{data: null, error: any}>((_, reject) => 
+        setTimeout(() => reject({ code: 'TIMEOUT', message: "O servidor demorou muito para responder." }), 15000)
       );
 
-      // Usamos uma interface para tipar a resposta
       const result = await Promise.race([fetchPromise, timeoutPromise]);
-      const { data, error: dbError } = result as { data: KitData | null, error: { message: string, code?: string } | null };
+      const { data, error: dbError } = result as { data: KitData | null, error: any };
 
-      if (dbError) throw new Error(dbError.message);
+      if (dbError) {
+        // PGRST116 é o erro do Supabase quando .single() não encontra nada
+        if (dbError.code === 'PGRST116') {
+          throw new Error("CÓDIGO NÃO ENCONTRADO NO SISTEMA");
+        }
+        throw new Error(dbError.message || "Erro de conexão");
+      }
 
       if (data) {
         setItemInfo({ id: data.id, nome: data.nome_kit, qtd: data.estoque_atual });
         playSuccess();
-      } else {
-        setError("Item não encontrado no sistema.");
-        playError();
       }
-    } catch (err: unknown) {
+    } catch (err: any) {
+      playError(); // Som de erro disparado imediatamente ao detectar falha
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      setError(msg);
-      playError();
+      setError(msg.toUpperCase());
     } finally {
       setIsSearching(false);
     }
@@ -111,10 +126,9 @@ export default function ScannerPage() {
       setScanResult(null);
       setItemInfo(null);
       alert("Baixa confirmada!");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro no processamento";
+    } catch (err: any) {
       playError();
-      alert(`Erro: ${msg}`);
+      alert(`Erro: ${err.message || "Falha ao processar"}`);
     } finally {
       setIsProcessing(false);
     }
@@ -172,8 +186,10 @@ export default function ScannerPage() {
              ) : error ? (
                <div className="space-y-6">
                   <AlertCircle size={80} className="mx-auto text-red-500" />
-                  <h2 className="text-3xl font-black text-gray-900 uppercase">Aviso</h2>
-                  <p className="text-gray-400 font-bold">{error}</p>
+                  <h2 className="text-3xl font-black text-gray-900 uppercase">Aviso do Sistema</h2>
+                  <div className="p-4 bg-red-50 rounded-2xl text-red-600 font-bold text-sm">
+                    {error}
+                  </div>
                   <button onClick={() => { setScanResult(null); setError(null); }} className="w-full bg-gray-900 text-white p-6 rounded-3xl font-black">TENTAR NOVAMENTE</button>
                </div>
              ) : (
@@ -184,10 +200,10 @@ export default function ScannerPage() {
                     <p className="text-green-600 font-bold text-xl mt-2 tracking-tight">Estoque: {itemInfo?.qtd} un</p>
                  </div>
                  <div className="space-y-3 pt-4">
-                    <button onClick={confirmarBaixa} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-6 rounded-3xl font-black text-2xl">
+                    <button onClick={confirmarBaixa} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-6 rounded-3xl font-black text-2xl shadow-xl shadow-purple-100 hover:scale-[1.02] transition-transform">
                       {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : "CONFIRMAR BAIXA"}
                     </button>
-                    <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm">CANCELAR</button>
+                    <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm hover:text-red-500 transition-colors">CANCELAR</button>
                  </div>
                </>
              )}
