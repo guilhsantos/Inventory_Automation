@@ -6,13 +6,11 @@ import Sidebar from "@/components/Sidebar";
 import { usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-// Criamos um "Wrapper" interno para ter acesso ao useAuth()
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
 
-  // 1. Enquanto carrega o estado do usuário, mostra uma tela limpa de carregamento
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -21,18 +19,16 @@ function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 2. Se for a tela de login, renderiza APENAS o conteúdo dela (sem Sidebar)
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  // 3. Se não estiver logado e não for a tela de login, não renderiza nada 
-  // (o useEffect nas páginas vai mandar para o /login)
+  // Se não houver usuário, renderizamos os 'children' de qualquer forma
+  // para que o useEffect de redirecionamento dentro das páginas funcione.
   if (!user) {
-    return null;
+    return <>{children}</>;
   }
 
-  // 4. Se estiver logado, renderiza o App completo (Sidebar + Conteúdo) juntos
   return (
     <div className="flex min-h-screen bg-white">
       <Sidebar />
