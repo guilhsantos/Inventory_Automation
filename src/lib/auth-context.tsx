@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "./supabase";
-import { User, Session } from "@supabase/supabase-js"; // AuthChangeEvent removido
+import { User, Session } from "@supabase/supabase-js";
 
 type AuthContextType = {
   user: User | null;
@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Busca a sessão inicial de forma direta
         const { data: { session } } = await supabase.auth.getSession();
         await handleUserSession(session);
       } catch (err) {
@@ -41,9 +42,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (!error && data) {
             setRole(data.role);
           } else {
-            setRole('OP_ESTOQUE');
+            setRole('OP_ESTOQUE'); 
           }
-        } catch { // Variável (e) removida
+        } catch { 
           setRole('OP_ESTOQUE');
         }
       } else {
@@ -54,14 +55,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     initializeAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => { // _event com underline para indicar que não é usado
-        await handleUserSession(session);
+    // CORREÇÃO: Filtramos os eventos para evitar deadlocks no LockManager
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          await handleUserSession(session);
+        }
         setLoading(false);
       }
     );
 
-    return () => authListener.subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
