@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "./supabase";
-import { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { User, Session } from "@supabase/supabase-js"; // AuthChangeEvent removido
 
 type AuthContextType = {
   user: User | null;
@@ -19,13 +19,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Tenta pegar a sessão inicial
         const { data: { session } } = await supabase.auth.getSession();
         await handleUserSession(session);
       } catch (err) {
         console.error("Erro na inicialização do Auth:", err);
       } finally {
-        setLoading(false); // Garante o fim do loading de qualquer jeito
+        setLoading(false);
       }
     };
 
@@ -42,9 +41,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (!error && data) {
             setRole(data.role);
           } else {
-            setRole('OP_ESTOQUE'); // Fallback caso não tenha perfil
+            setRole('OP_ESTOQUE');
           }
-        } catch (e) {
+        } catch { // Variável (e) removida
           setRole('OP_ESTOQUE');
         }
       } else {
@@ -56,7 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initializeAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => { // _event com underline para indicar que não é usado
         await handleUserSession(session);
         setLoading(false);
       }
