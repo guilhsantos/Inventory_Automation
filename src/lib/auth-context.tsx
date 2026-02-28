@@ -17,50 +17,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getUserData = async () => {
+    const initializeAuth = async () => {
       try {
+        // Tenta pegar a sessão inicial
         const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          setUser(session.user);
-          // Busca o cargo no perfil
+        await handleUserSession(session);
+      } catch (err) {
+        console.error("Erro na inicialização do Auth:", err);
+      } finally {
+        setLoading(false); // Garante o fim do loading de qualquer jeito
+      }
+    };
+
+    const handleUserSession = async (session: Session | null) => {
+      if (session?.user) {
+        setUser(session.user);
+        try {
           const { data, error } = await supabase
             .from("profiles")
             .select("role")
             .eq("id", session.user.id)
             .single();
           
-          if (error) {
-            console.error("Erro ao buscar role:", error.message);
-            setRole('OP_ESTOQUE'); // Fallback se der erro
+          if (!error && data) {
+            setRole(data.role);
           } else {
-            setRole(data?.role || 'OP_ESTOQUE');
+            setRole('OP_ESTOQUE'); // Fallback caso não tenha perfil
           }
+        } catch (e) {
+          setRole('OP_ESTOQUE');
         }
-      } catch (err) {
-        console.error("Erro inesperado no Auth:", err);
-      } finally {
-        setLoading(false); // Garante que o loading pare, mesmo com erro
+      } else {
+        setUser(null);
+        setRole(null);
       }
     };
 
-    getUserData();
+    initializeAuth();
 
-    // Listener de mudanças (Login/Logout)
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        if (session?.user) {
-          setUser(session.user);
-          const { data } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", session.user.id)
-            .single();
-          setRole(data?.role || 'OP_ESTOQUE');
-        } else {
-          setUser(null);
-          setRole(null);
-        }
+      async (event, session) => {
+        await handleUserSession(session);
         setLoading(false);
       }
     );
