@@ -47,7 +47,7 @@ export default function Sidebar() {
         <img 
           src="/logo.jpg" 
           alt="Reauto Logo" 
-          className={`transition-all duration-300 ${isCollapsed ? "h-8 w-8 object-cover rounded-lg" : "h-14 w-auto"}`} 
+          className={`transition-all duration-300 ${isCollapsed ? "h-8 w-8 object-cover rounded-lg" : "h-8 w-auto"}`} 
         />
       </div>
 
