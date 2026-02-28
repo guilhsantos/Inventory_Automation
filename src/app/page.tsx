@@ -11,17 +11,16 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Se não estiver logado, manda para o login
-    if (!loading && !user) {
-      router.push("/login");
-    }
-    
-    // Se for operador de estoque, manda direto pro scanner para agilizar o trabalho
-    if (!loading && role === 'OP_ESTOQUE') {
-      router.push("/scanner");
+    if (!loading) {
+      if (!user) {
+        router.push("/login");
+      } else if (role === 'OP_ESTOQUE') {
+        router.push("/scanner");
+      }
     }
   }, [user, role, loading, router]);
 
+  // 1. Enquanto carrega, mostra o spinner centralizado
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -30,11 +29,18 @@ export default function HomePage() {
     );
   }
 
+  // 2. CORREÇÃO ANTI-FLASH: 
+  // Se o usuário for Operador ou se não houver usuário, retornamos null.
+  // Isso impede que o Dashboard abaixo seja "desenhado" na tela enquanto o redirecionamento acontece.
+  if (role !== 'ADMIN') {
+    return null;
+  }
+
+  // 3. Somente o ADMIN chega nesta parte do código
   return (
-    <div className="min-h-screen p-8 max-w-5xl mx-auto">
+    <div className="min-h-screen p-8 max-w-5xl mx-auto animate-in fade-in duration-500">
       <main className="mt-8">
         <div className="mb-12">
-          {/* AQUI ENTRA O PASSO 3: Título com as cores da Reauto */}
           <h2 className="text-5xl font-black text-[#262626] leading-tight">
             Painel de <span className="text-[#5D286C]">Gestão Geral</span>
           </h2>
@@ -44,7 +50,6 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* AQUI ENTRA O PASSO 3: Link do Scanner com a paleta */}
           <Link 
             href="/scanner" 
             className="p-10 bg-white border-2 border-gray-100 rounded-[3rem] hover:border-[#7B1470] transition-all group shadow-sm relative overflow-hidden"
@@ -63,7 +68,6 @@ export default function HomePage() {
             </div>
           </Link>
 
-          {/* Módulo de Produção (Desabilitado por enquanto) */}
           <div className="p-10 bg-gray-50/50 border-2 border-transparent rounded-[3rem] opacity-40 cursor-not-allowed">
             <div className="bg-gray-200 text-gray-400 p-5 rounded-3xl w-fit mb-8">
               <Package size={40} />
@@ -76,7 +80,6 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Rodapé Interno */}
       <footer className="mt-20 pt-8 border-t border-gray-100">
         <p className="text-center text-[10px] text-gray-300 font-bold uppercase tracking-[0.5em]">
           Powered by Reauto Intelligence
