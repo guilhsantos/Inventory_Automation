@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus, Edit2, X, Save, Lock, User as UserIcon } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
 
 export default function UsersConfigPage() {
@@ -10,6 +11,15 @@ export default function UsersConfigPage() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Estados para Criação
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', password: '', full_name: '', role: 'OP_ESTOQUE' });
+  
+  // Estados para Edição
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -17,7 +27,6 @@ export default function UsersConfigPage() {
 
   async function fetchUsers() {
     setLoading(true);
-    // Ordenar por email evita o Erro 400 caso a coluna created_at não esteja indexada ou falhe
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -25,12 +34,75 @@ export default function UsersConfigPage() {
     
     if (error) {
       showToast("Erro ao carregar usuários", "error");
-      console.error(error);
     } else {
       setProfiles(data || []);
     }
     setLoading(false);
   }
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      // Criamos um cliente temporário que não salva sessão para não deslogar o admin atual
+      const tempSupabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { auth: { persistSession: false } }
+      );
+
+      const { data, error } = await tempSupabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: {
+          data: {
+            full_name: newUser.full_name,
+            role: newUser.role
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      showToast("Usuário criado com sucesso!");
+      setIsCreateModalOpen(false);
+      setNewUser({ email: '', password: '', full_name: '', role: 'OP_ESTOQUE' });
+      
+      // Pequeno atraso para permitir que o trigger no banco processe o perfil
+      setTimeout(fetchUsers, 1500);
+    } catch (err: any) {
+      showToast(err.message || "Erro ao criar login", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: editingUser.full_name,
+          role: editingUser.role
+        })
+        .eq("id", editingUser.id);
+
+      if (error) throw error;
+
+      showToast("Usuário atualizado com sucesso!");
+      setIsEditModalOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const filteredUsers = profiles.filter(u => {
     const search = searchTerm.toLowerCase();
@@ -41,7 +113,7 @@ export default function UsersConfigPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 p-4">
-      {/* Header com Busca */}
+      {/* Header com Busca e Botão Novo */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-[#262626] flex items-center gap-3">
@@ -51,16 +123,12 @@ export default function UsersConfigPage() {
         </div>
         
         <div className="flex gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full p-4 pl-12 bg-white border-2 border-gray-50 rounded-2xl font-bold outline-none focus:border-[#5D286C] shadow-sm"
-            />
-          </div>
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex-1 md:flex-none bg-[#5D286C] text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-100 transition-transform active:scale-95"
+          >
+            <UserPlus size={20} /> NOVO USUÁRIO
+          </button>
           <button onClick={fetchUsers} className="p-4 bg-white border-2 border-gray-50 rounded-2xl text-gray-400 hover:text-[#5D286C] transition-all">
             <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
           </button>
@@ -77,14 +145,12 @@ export default function UsersConfigPage() {
           {filteredUsers.map(user => (
             <div key={user.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:shadow-md group">
               <div className="flex items-center gap-4 w-full md:w-auto">
-                {/* Avatar com inicial */}
                 <div className="bg-purple-50 text-[#5D286C] w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0 group-hover:scale-105 transition-transform">
                   {(user.full_name || user.email)?.[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  {/* Se o nome for nulo, mostra 'Usuário sem nome' ou o e-mail */}
                   <h3 className="font-black text-[#262626] truncate text-lg min-h-[1.5rem]">
-                    {user.full_name || "Usuário sem nome"} 
+                    {user.full_name || ""} 
                   </h3>
                   <p className="text-sm text-gray-400 font-bold flex items-center gap-1">
                     <Mail size={12} /> {user.email || "E-mail não sincronizado"}
@@ -92,21 +158,85 @@ export default function UsersConfigPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 shrink-0">
-                <Shield size={16} className="text-[#5D286C]" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                  {user.role === 'ADMIN' ? 'Administrador' : 'Operador'}
-                </span>
+              <div className="flex items-center gap-4 w-full md:w-auto shrink-0">
+                <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 flex-1 md:flex-none justify-center">
+                  <Shield size={16} className="text-[#5D286C]" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    {user.role === 'ADMIN' ? 'Administrador' : 'Operador'}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setEditingUser(user);
+                    setIsEditModalOpen(true);
+                  }}
+                  className="p-3 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                >
+                  <Edit2 size={20} />
+                </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
 
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-20 bg-gray-50 rounded-[2.5rem] border-2 border-dashed border-gray-200">
-              <UserPlus className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-400 font-bold uppercase text-xs">Nenhum usuário localizado</p>
-            </div>
-          )}
+      {/* Modal de Criação de Login */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setIsCreateModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600"><X size={24} /></button>
+            <h2 className="text-2xl font-black text-[#262626] mb-6 flex items-center gap-2"><UserPlus className="text-[#5D286C]" /> Criar Login</h2>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                <input required type="text" placeholder="Ex: João Silva" value={newUser.full_name} onChange={e => setNewUser({...newUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">E-mail Profissional</label>
+                <input required type="email" placeholder="usuario@empresa.com" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
+                <input required type="password" placeholder="Mínimo 6 caracteres" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cargo</label>
+                <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
+                  <option value="OP_ESTOQUE">Operador de Estoque</option>
+                  <option value="ADMIN">Administrador</option>
+                </select>
+              </div>
+              <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 mt-4">
+                {isSubmitting ? <Loader2 className="animate-spin" /> : "CRIAR ACESSO NO SISTEMA"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Perfil */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600"><X size={24} /></button>
+            <h2 className="text-2xl font-black text-[#262626] mb-6 flex items-center gap-2"><Edit2 className="text-[#5D286C]" /> Editar Perfil</h2>
+            <form onSubmit={handleUpdateUser} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                <input type="text" required value={editingUser?.full_name || ""} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cargo</label>
+                <select value={editingUser?.role || "OP_ESTOQUE"} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
+                  <option value="OP_ESTOQUE">Operador de Estoque</option>
+                  <option value="ADMIN">Administrador</option>
+                </select>
+              </div>
+              <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl mt-4">
+                {isSubmitting ? <Loader2 className="animate-spin" /> : "SALVAR ALTERAÇÕES"}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
