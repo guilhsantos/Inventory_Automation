@@ -94,6 +94,7 @@ export default function ScannerPage() {
     setIsProcessing(true);
 
     try {
+      // 1. Atualiza o estoque do Kit
       const { error: updateError } = await supabase
         .from('kits')
         .update({ estoque_atual: itemInfo.qtd + 1 }) 
@@ -101,11 +102,13 @@ export default function ScannerPage() {
 
       if (updateError) throw updateError;
 
-      await supabase.from('movimentacoes').insert({
+      // 2. Registra na nova tabela stock_movements (Inglês)
+      await supabase.from('stock_movements').insert({
         kit_id: itemInfo.id,
-        usuario_id: user.id,
-        tipo: 'ENTRADA', 
-        quantidade: 1
+        user_id: user.id,
+        type: 'IN', 
+        quantity: 1,
+        notes: 'Entrada via bip de scanner'
       });
 
       setScanResult(null);
@@ -113,7 +116,7 @@ export default function ScannerPage() {
       showToast("Produção registrada com sucesso!");
     } catch (err: any) {
       playError();
-      showToast(`Erro: ${err.message || "Falha ao processar"}`);
+      showToast(`Erro: ${err.message || "Falha ao processar"}`, "error");
     } finally {
       setIsProcessing(false);
     }
