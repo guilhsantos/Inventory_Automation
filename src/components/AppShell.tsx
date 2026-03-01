@@ -5,7 +5,8 @@ import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/components/Sidebar";
 import { usePathname } from "next/navigation";
 import { Loader2, Menu, X } from "lucide-react";
-import { ToastProvider } from "@/lib/toast-context"; // Importado aqui
+import { ToastProvider } from "@/lib/toast-context"; 
+import Image from "next/image";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -32,7 +33,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen bg-gray-50/50 flex-col md:flex-row">
         {/* Menu Mobile Header */}
         <div className="md:hidden bg-white border-b p-4 flex justify-between items-center sticky top-0 z-50">
-          <img src="/logo.jpg" alt="Logo" className="h-8 w-auto" />
+          <Image src="/logo.jpg" alt="Logo" width={120} height={32} className="h-8 w-auto" />
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
           </button>

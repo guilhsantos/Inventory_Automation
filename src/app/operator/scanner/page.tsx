@@ -13,12 +13,6 @@ const Scanner = dynamic(() => import("@/components/Scanner"), {
   loading: () => <div className="min-h-[350px] flex items-center justify-center bg-gray-50 rounded-[2.5rem] text-gray-400 font-bold">Iniciando...</div>
 });
 
-interface KitData {
-  id: number;
-  nome_kit: string;
-  estoque_atual: number;
-}
-
 export default function ScannerPage() {
   const { user } = useAuth();
   const [scanResult, setScanResult] = useState<string | null>(null);
