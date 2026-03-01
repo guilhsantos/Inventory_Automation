@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { CheckCircle2, Laptop, Loader2, AlertCircle, Keyboard, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Laptop, Loader2, AlertCircle, Keyboard, ArrowLeft, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
@@ -10,7 +10,7 @@ import { useToast } from "@/lib/toast-context";
 
 const Scanner = dynamic(() => import("@/components/Scanner"), { 
   ssr: false,
-  loading: () => <div className="min-h-screen flex items-center justify-center bg-black text-white font-bold">Iniciando Câmera...</div>
+  loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black text-white font-bold uppercase tracking-widest text-xs">Iniciando Câmera...</div>
 });
 
 export default function ScannerPage() {
@@ -123,33 +123,47 @@ export default function ScannerPage() {
   const isSuccess = !!itemInfo && !isSearching;
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${isSuccess ? "bg-green-500 p-4" : scanResult ? "bg-transparent p-4" : "bg-transparent"}`}>
-      {/* Quando o scanner está aberto no Mobile, ele vira tela cheia */}
+    <div className={`min-h-screen transition-colors duration-500 ${isSuccess ? "bg-green-500" : "bg-transparent"}`}>
+      
+      {/* SCANNER TELA CHEIA PARA MOBILE */}
       {isMobile && !scanResult ? (
-        <div className="fixed inset-0 z-50 bg-black animate-in fade-in duration-300">
-          <div className="relative w-full h-full">
-            <Scanner onSuccess={handleIdentifyItem} />
-            
-            {/* Overlay Superior (Botão Voltar) */}
-            <div className="absolute top-6 left-6 z-[60]">
-               <Link href="/operator/production" className="p-4 bg-white/10 backdrop-blur-md rounded-2xl text-white">
-                  <ArrowLeft size={24} />
-               </Link>
+        <div className="fixed inset-0 z-[100] bg-black">
+          <Scanner onSuccess={handleIdentifyItem} />
+          
+          {/* Overlay de Interface sobre o Scanner */}
+          <div className="absolute inset-0 flex flex-col justify-between p-6 pointer-events-none">
+            <div className="flex justify-between items-center pointer-events-auto">
+              <Link href="/operator/production" className="p-4 bg-black/40 backdrop-blur-md rounded-2xl text-white border border-white/10">
+                <ArrowLeft size={24} />
+              </Link>
+              <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+                <p className="text-white text-[10px] font-black uppercase tracking-widest text-center">Modo Leitura Ativo</p>
+              </div>
             </div>
 
-            {/* Guia visual fixa no centro */}
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-              <div className="w-[85%] aspect-[3/2] border-2 border-white/30 rounded-3xl relative">
-                <div className="absolute top-1/2 left-0 w-full h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
+            {/* Guia Visual do Scanner */}
+            <div className="flex-1 flex items-center justify-center">
+              <div className="w-[85%] h-[30%] border-2 border-white/40 rounded-3xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]">
+                <div className="absolute top-1/2 left-0 w-full h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)] animate-pulse" />
+                
+                {/* Cantos do Foco */}
+                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg" />
+                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg" />
+                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-lg" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-lg" />
               </div>
-              <p className="text-white font-black text-xs uppercase mt-8 tracking-widest bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
-                Aponte para Código de Barras ou QR
+            </div>
+
+            <div className="text-center pb-10">
+              <p className="text-white font-bold text-xs uppercase tracking-wider bg-black/20 backdrop-blur-sm inline-block px-4 py-2 rounded-full">
+                Alinhe o código de barras no centro
               </p>
             </div>
           </div>
         </div>
       ) : (
-        <div className="max-w-2xl mx-auto space-y-6">
+        /* UI PARA DESKTOP OU RESULTADO DO SCAN */
+        <div className="max-w-2xl mx-auto p-4 space-y-6">
           {!scanResult && (
             <div className="flex items-center gap-4 mb-4">
               <Link href="/operator/production" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm">
@@ -160,20 +174,19 @@ export default function ScannerPage() {
           )}
 
           {!scanResult ? (
-            <div className="space-y-8 text-center pt-10 md:pt-20 px-4">
-               <div className="flex flex-col items-center">
-                  <div className="bg-purple-50 p-6 md:p-10 rounded-full mb-6">
-                    <Laptop size={80} className="text-[#5D286C]" />
+            <div className="space-y-8 text-center pt-10 md:pt-20">
+               <div className="flex flex-col items-center px-4">
+                  <div className="bg-purple-50 p-10 rounded-full mb-6 text-[#5D286C]">
+                    <Laptop size={64} />
                   </div>
-                  <h2 className="text-2xl md:text-3xl font-black text-[#262626]">Aguardando Bipe de Kit...</h2>
+                  <h2 className="text-2xl md:text-3xl font-black text-[#262626]">Aguardando Bipe...</h2>
                   
-                  {/* Campo oculto para leitura com leitor USB/Bluetooth no PC */}
                   <form onSubmit={(e) => { e.preventDefault(); handleIdentifyItem(manualCode.toUpperCase()); }}>
                     <input ref={inputRef} type="text" value={manualCode} onChange={(e) => setManualCode(e.target.value)} className="opacity-0 absolute pointer-events-none" autoFocus />
                   </form>
 
-                  <button onClick={() => setShowManualInput(!showManualInput)} className="mt-8 flex items-center gap-2 text-gray-400 font-bold hover:text-[#5D286C]">
-                    <Keyboard size={18} /> {showManualInput ? "Ocultar teclado" : "Digitar código manualmente"}
+                  <button onClick={() => setShowManualInput(!showManualInput)} className="mt-8 flex items-center gap-2 text-gray-400 font-bold hover:text-[#5D286C] uppercase text-xs tracking-widest">
+                    <Keyboard size={18} /> {showManualInput ? "Ocultar teclado" : "Digitar Manualmente"}
                   </button>
 
                   {showManualInput && (
@@ -182,7 +195,7 @@ export default function ScannerPage() {
                         type="text" 
                         value={manualCode} 
                         onChange={(e) => setManualCode(e.target.value)} 
-                        className="flex-1 p-4 bg-white border-2 border-gray-100 rounded-2xl outline-none focus:border-[#5D286C] font-bold uppercase"
+                        className="flex-1 p-4 bg-white border-2 border-gray-100 rounded-2xl outline-none focus:border-[#5D286C] font-black"
                         placeholder="CÓDIGO"
                       />
                       <button onClick={() => handleIdentifyItem(manualCode.toUpperCase())} className="bg-[#5D286C] text-white px-6 rounded-2xl font-black">OK</button>
@@ -191,32 +204,33 @@ export default function ScannerPage() {
                 </div>
             </div>
           ) : (
-            /* Tela de Resultado (Igual ao anterior) */
-            <div className="p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] text-center space-y-8 animate-in zoom-in duration-300 shadow-2xl bg-white mt-10">
+            /* TELA DE RESULTADO PÓS-BIPE */
+            <div className="p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] text-center space-y-8 animate-in zoom-in duration-300 shadow-2xl bg-white mt-4 md:mt-10 mx-2">
                {isSearching ? (
                  <div className="py-10 flex flex-col items-center">
                     <Loader2 className="animate-spin text-[#5D286C]" size={40} />
-                    <p className="mt-4 text-[#5D286C] font-black uppercase tracking-widest text-sm">Consultando...</p>
+                    <p className="mt-4 text-[#5D286C] font-black uppercase tracking-widest text-xs">Consultando...</p>
                  </div>
                ) : error ? (
                  <div className="space-y-6">
                     <AlertCircle size={60} className="mx-auto text-red-500" />
-                    <h2 className="text-2xl font-black text-gray-900 uppercase">Aviso</h2>
-                    <div className="p-4 bg-red-50 rounded-2xl text-red-600 font-bold text-sm">{error}</div>
-                    <button onClick={() => { setScanResult(null); setError(null); }} className="w-full bg-gray-900 text-white p-5 rounded-3xl font-black">TENTAR NOVAMENTE</button>
+                    <h2 className="text-2xl font-black text-gray-900 uppercase">Não Encontrado</h2>
+                    <div className="p-4 bg-red-50 rounded-2xl text-red-600 font-bold text-sm uppercase tracking-tight">{error}</div>
+                    <button onClick={() => { setScanResult(null); setError(null); }} className="w-full bg-gray-900 text-white p-5 rounded-3xl font-black uppercase tracking-widest">Tentar Novamente</button>
                  </div>
                ) : (
                  <>
                    <CheckCircle2 size={60} className="mx-auto text-green-500" />
                    <div>
-                      <h2 className="text-3xl md:text-5xl font-black text-[#262626] mt-2">{itemInfo?.nome}</h2>
-                      <p className="text-green-600 font-bold text-lg mt-2 tracking-tight">Estoque Atual: {itemInfo?.qtd} un</p>
+                      <p className="text-[#5D286C] font-black text-xs uppercase tracking-widest mb-2">Item Identificado</p>
+                      <h2 className="text-3xl md:text-5xl font-black text-[#262626] leading-tight">{itemInfo?.nome}</h2>
+                      <p className="text-green-600 font-bold text-lg mt-4 tracking-tight uppercase">Estoque: {itemInfo?.qtd} un</p>
                    </div>
-                   <div className="space-y-3 pt-4">
-                      <button onClick={confirmarProducao} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-purple-100">
+                   <div className="space-y-3 pt-6 border-t border-gray-50">
+                      <button onClick={confirmarProducao} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-purple-100 hover:scale-[1.02] active:scale-95 transition-all">
                         {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : "CONFIRMAR ENTRADA"}
                       </button>
-                      <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm uppercase">Cancelar</button>
+                      <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm uppercase tracking-widest p-2">Cancelar</button>
                    </div>
                  </>
                )}
