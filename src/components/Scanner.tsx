@@ -16,20 +16,21 @@ export default function Scanner({ onSuccess }: ScannerProps) {
         scannerRef.current = html5QrCode;
 
         const config = {
-          fps: 30, // Aumentado para maior fluidez
+          fps: 25, // Equilíbrio entre performance e processamento
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            // Retângulo retangular otimizado para códigos de barra em pé ou deitado
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const size = Math.floor(minEdge * 0.8);
+            // Área de leitura retangular ideal para barras
             return { 
-              width: viewfinderWidth * 0.85, 
-              height: viewfinderHeight * 0.35 // Mais baixo e largo para barras
+              width: viewfinderWidth * 0.8, 
+              height: viewfinderHeight * 0.3 
             };
           },
-          aspectRatio: 1.777778, // Força 16:9 para capturar mais detalhes laterais (barras)
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
+          // Forçamos a câmera a buscar a melhor resolução possível para ver as linhas do código de barras
+          videoConstraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
           },
+          aspectRatio: 1.777778, 
           formatsToSupport: [
             Html5QrcodeSupportedFormats.QR_CODE,
             Html5QrcodeSupportedFormats.EAN_13,
@@ -38,7 +39,8 @@ export default function Scanner({ onSuccess }: ScannerProps) {
             Html5QrcodeSupportedFormats.CODE_39,
             Html5QrcodeSupportedFormats.UPC_A,
             Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.ITF
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.CODE_93
           ]
         };
 
@@ -66,7 +68,6 @@ export default function Scanner({ onSuccess }: ScannerProps) {
 
   return (
     <div className="relative w-full h-full overflow-hidden">
-      {/* CSS Injetado para garantir que o vídeo preencha tudo sem faixas pretas */}
       <style dangerouslySetInnerHTML={{ __html: `
         #reader video {
           object-fit: cover !important;
