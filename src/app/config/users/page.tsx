@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
-import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus, Edit2, X, Save, Lock, User as UserIcon } from "lucide-react";
+import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus, Edit2, X, Save, Lock, Trash2 } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
+import ConfirmModal from "@/components/ConfirmModal"; // Componente já existente
 
 export default function UsersConfigPage() {
   const { showToast } = useToast();
@@ -20,6 +21,9 @@ export default function UsersConfigPage() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Estado para Exclusão
+  const [userToDelete, setUserToDelete] = useState<any>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -45,14 +49,13 @@ export default function UsersConfigPage() {
     setIsSubmitting(true);
 
     try {
-      // Criamos um cliente temporário que não salva sessão para não deslogar o admin atual
       const tempSupabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         { auth: { persistSession: false } }
       );
 
-      const { data, error } = await tempSupabase.auth.signUp({
+      const { error } = await tempSupabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
         options: {
@@ -69,7 +72,6 @@ export default function UsersConfigPage() {
       setIsCreateModalOpen(false);
       setNewUser({ email: '', password: '', full_name: '', role: 'OP_ESTOQUE' });
       
-      // Pequeno atraso para permitir que o trigger no banco processe o perfil
       setTimeout(fetchUsers, 1500);
     } catch (err: any) {
       showToast(err.message || "Erro ao criar login", "error");
@@ -104,6 +106,26 @@ export default function UsersConfigPage() {
     }
   };
 
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    
+    try {
+      // Remove da tabela de perfis
+      const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", userToDelete.id);
+
+      if (error) throw error;
+
+      showToast("Usuário removido do sistema!");
+      setUserToDelete(null);
+      fetchUsers();
+    } catch (err: any) {
+      showToast("Erro ao remover: " + err.message, "error");
+    }
+  };
+
   const filteredUsers = profiles.filter(u => {
     const search = searchTerm.toLowerCase();
     const nameMatch = (u.full_name || "").toLowerCase().includes(search);
@@ -113,7 +135,7 @@ export default function UsersConfigPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 p-4">
-      {/* Header com Busca e Botão Novo */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-[#262626] flex items-center gap-3">
@@ -137,7 +159,7 @@ export default function UsersConfigPage() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-gray-50 shadow-sm">
-          <Loader2 className="animate-spin text-[#5D286C] mb-4" size={40} />
+          <Loader2 className="animate-spin text-[#5D286C]" size={40} />
           <p className="text-gray-400 font-black uppercase text-xs tracking-widest">Sincronizando Banco...</p>
         </div>
       ) : (
@@ -145,7 +167,7 @@ export default function UsersConfigPage() {
           {filteredUsers.map(user => (
             <div key={user.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:shadow-md group">
               <div className="flex items-center gap-4 w-full md:w-auto">
-                <div className="bg-purple-50 text-[#5D286C] w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0 group-hover:scale-105 transition-transform">
+                <div className="bg-purple-50 text-[#5D286C] w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0">
                   {(user.full_name || user.email)?.[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
@@ -174,6 +196,12 @@ export default function UsersConfigPage() {
                 >
                   <Edit2 size={20} />
                 </button>
+                <button 
+                  onClick={() => setUserToDelete(user)}
+                  className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                >
+                  <Trash2 size={20} />
+                </button>
               </div>
             </div>
           ))}
@@ -183,29 +211,17 @@ export default function UsersConfigPage() {
       {/* Modal de Criação de Login */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative">
             <button onClick={() => setIsCreateModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600"><X size={24} /></button>
             <h2 className="text-2xl font-black text-[#262626] mb-6 flex items-center gap-2"><UserPlus className="text-[#5D286C]" /> Criar Login</h2>
             <form onSubmit={handleCreateUser} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
-                <input required type="text" placeholder="Ex: João Silva" value={newUser.full_name} onChange={e => setNewUser({...newUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">E-mail Profissional</label>
-                <input required type="email" placeholder="usuario@empresa.com" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
-                <input required type="password" placeholder="Mínimo 6 caracteres" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cargo</label>
-                <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
-                  <option value="OP_ESTOQUE">Operador de Estoque</option>
-                  <option value="ADMIN">Administrador</option>
-                </select>
-              </div>
+              <input required type="text" placeholder="Nome Completo" value={newUser.full_name} onChange={e => setNewUser({...newUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              <input required type="email" placeholder="E-mail" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              <input required type="password" placeholder="Senha" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
+                <option value="OP_ESTOQUE">Operador de Estoque</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
               <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 mt-4">
                 {isSubmitting ? <Loader2 className="animate-spin" /> : "CRIAR ACESSO NO SISTEMA"}
               </button>
@@ -217,21 +233,15 @@ export default function UsersConfigPage() {
       {/* Modal de Edição de Perfil */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative">
             <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600"><X size={24} /></button>
             <h2 className="text-2xl font-black text-[#262626] mb-6 flex items-center gap-2"><Edit2 className="text-[#5D286C]" /> Editar Perfil</h2>
             <form onSubmit={handleUpdateUser} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome Completo</label>
-                <input type="text" required value={editingUser?.full_name || ""} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cargo</label>
-                <select value={editingUser?.role || "OP_ESTOQUE"} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
-                  <option value="OP_ESTOQUE">Operador de Estoque</option>
-                  <option value="ADMIN">Administrador</option>
-                </select>
-              </div>
+              <input type="text" required value={editingUser?.full_name || ""} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
+              <select value={editingUser?.role || "OP_ESTOQUE"} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
+                <option value="OP_ESTOQUE">Operador de Estoque</option>
+                <option value="ADMIN">Administrador</option>
+              </select>
               <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl mt-4">
                 {isSubmitting ? <Loader2 className="animate-spin" /> : "SALVAR ALTERAÇÕES"}
               </button>
@@ -239,6 +249,15 @@ export default function UsersConfigPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ConfirmModal 
+        isOpen={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
+        onConfirm={handleDeleteUser}
+        title="Excluir Usuário"
+        message={`Deseja realmente remover o usuário ${userToDelete?.email}? Esta ação removerá o perfil do sistema.`}
+      />
     </div>
   );
 }
