@@ -126,14 +126,14 @@ export default function NewOrderPage() {
         </div>
 
         {/* Seleção de Kits */}
-        <div className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
-          <h2 className="text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus /> Adicionar Kits ao Pedido</h2>
+        <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
+          <h2 className="text-lg md:text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus /> Adicionar Kits ao Pedido</h2>
           
           <div className="flex gap-2">
             <select 
               value={currentKitSelection} 
               onChange={e => setCurrentKitSelection(e.target.value)} 
-              className="flex-1 p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]"
+              className="flex-1 p-3.5 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm appearance-none"
             >
               <option value="">Selecione um Kit...</option>
               {availableKits.map(k => (
@@ -143,7 +143,7 @@ export default function NewOrderPage() {
             <button 
               type="button"
               onClick={handleAddKit} 
-              className="bg-[#5D286C] text-white p-4 rounded-2xl shadow-lg hover:scale-105 transition-transform"
+              className="bg-[#5D286C] text-white p-3.5 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0"
             >
               <Plus size={24}/>
             </button>
@@ -152,17 +152,16 @@ export default function NewOrderPage() {
           <div className="space-y-3 mt-4">
             {selectedKits.map(item => (
               <div key={item.kit_id} className="flex items-center justify-between bg-purple-50 p-4 rounded-2xl animate-in slide-in-from-top-1">
-                <div className="flex flex-col">
-                  <span className="font-black text-[#5D286C]">
+                <div className="flex flex-col flex-1 min-w-0 mr-2">
+                  <span className="font-black text-[#5D286C] text-sm truncate">
                     {availableKits.find(k => k.id === item.kit_id)?.codigo_unico}
                   </span>
-                  <span className="text-sm font-bold text-gray-500">
+                  <span className="text-[10px] font-bold text-gray-500 truncate">
                     {availableKits.find(k => k.id === item.kit_id)?.nome_kit}
                   </span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="flex flex-col items-center">
-                    <label className="text-[10px] font-black text-gray-400 uppercase">Qtd</label>
                     <input 
                       type="number" 
                       min="1" 
@@ -172,15 +171,15 @@ export default function NewOrderPage() {
                         newItems.find(i => i.kit_id === item.kit_id)!.qty = parseInt(e.target.value) || 1;
                         setSelectedKits(newItems);
                       }} 
-                      className="w-20 p-2 rounded-xl text-center font-black text-[#5D286C] border-none outline-none" 
+                      className="w-12 p-1.5 rounded-lg text-center font-black text-[#5D286C] text-sm" 
                     />
                   </div>
                   <button 
                     type="button"
                     onClick={() => setSelectedKits(selectedKits.filter(i => i.kit_id !== item.kit_id))} 
-                    className="text-red-400 hover:text-red-600 transition-colors"
+                    className="text-red-400 p-1"
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={18} />
                   </button>
                 </div>
               </div>

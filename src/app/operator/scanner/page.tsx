@@ -159,7 +159,20 @@ export default function ScannerPage() {
                   </div>
                 )}
               </div>
-              {isMobile && <div className="mt-10 rounded-3xl overflow-hidden shadow-lg"><Scanner onSuccess={handleIdentifyItem} /></div>}
+              {isMobile && !scanResult && (
+                <div className="mt-8 animate-in fade-in zoom-in duration-500">
+                  <div className="rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white bg-black relative aspect-[3/4] max-h-[60vh]">
+                    <Scanner onSuccess={handleIdentifyItem} />
+                    {/* Guia visual para código de barras */}
+                    <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
+                      <div className="w-full h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
+                    </div>
+                  </div>
+                  <p className="text-center text-gray-400 font-bold text-[10px] uppercase mt-4 tracking-widest">
+                    Aponte a câmera para o código de barras ou QR Code
+                  </p>
+                </div>
+              )}
           </div>
         ) : (
           <div className="p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] text-center space-y-8 animate-in zoom-in duration-300 shadow-2xl bg-white">
