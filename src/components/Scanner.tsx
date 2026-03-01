@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 interface ScannerProps {
   onSuccess: (result: string) => void;
@@ -10,19 +10,37 @@ export default function Scanner({ onSuccess }: ScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
-    // Garante que o código só rode no navegador
     const startScanner = async () => {
       try {
         const html5QrCode = new Html5Qrcode("reader");
         scannerRef.current = html5QrCode;
 
+        // Configuração para suportar múltiplos formatos
+        const config = {
+          fps: 20, // Mais frames por segundo para leitura rápida
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            // Cria um retângulo de leitura proporcional ao tamanho da tela
+            const width = viewfinderWidth * 0.8;
+            const height = width * 0.6; // Mais largo para códigos de barra
+            return { width, height };
+          },
+          // Formatos que o scanner deve reconhecer
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_39
+          ]
+        };
+
         await html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          config,
           (result) => {
             onSuccess(result);
           },
-          () => {} // Ignora falhas de foco
+          () => {} 
         );
       } catch (err) {
         console.error("Erro ao iniciar scanner:", err);
@@ -39,6 +57,7 @@ export default function Scanner({ onSuccess }: ScannerProps) {
   }, [onSuccess]);
 
   return (
-    <div id="reader" className="w-full overflow-hidden rounded-[2.5rem] border-[3px] border-purple-600 bg-gray-50 min-h-[350px] shadow-2xl shadow-purple-100" />
+    // Removida borda e arredondamento excessivo para preencher melhor a tela
+    <div id="reader" className="w-full h-full bg-black" />
   );
 }

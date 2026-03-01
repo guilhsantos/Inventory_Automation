@@ -10,7 +10,7 @@ import { useToast } from "@/lib/toast-context";
 
 const Scanner = dynamic(() => import("@/components/Scanner"), { 
   ssr: false,
-  loading: () => <div className="min-h-[350px] flex items-center justify-center bg-gray-50 rounded-[2.5rem] text-gray-400 font-bold">Iniciando...</div>
+  loading: () => <div className="min-h-screen flex items-center justify-center bg-black text-white font-bold">Iniciando Câmera...</div>
 });
 
 export default function ScannerPage() {
@@ -94,7 +94,6 @@ export default function ScannerPage() {
     setIsProcessing(true);
 
     try {
-      // 1. Atualiza o estoque do Kit
       const { error: updateError } = await supabase
         .from('kits')
         .update({ estoque_atual: itemInfo.qtd + 1 }) 
@@ -102,7 +101,6 @@ export default function ScannerPage() {
 
       if (updateError) throw updateError;
 
-      // 2. Registra na nova tabela stock_movements (Inglês)
       await supabase.from('stock_movements').insert({
         kit_id: itemInfo.id,
         user_id: user.id,
@@ -125,94 +123,107 @@ export default function ScannerPage() {
   const isSuccess = !!itemInfo && !isSearching;
 
   return (
-    <div className={`min-h-screen p-4 md:p-8 transition-colors duration-500 ${isSuccess ? "bg-green-500" : "bg-transparent"}`}>
-      <div className="max-w-2xl mx-auto space-y-6">
-        {!scanResult && (
-          <div className="flex items-center gap-4 mb-4">
-            <Link href="/operator/production" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm transition-all">
-              <ArrowLeft size={20} />
-            </Link>
-            <h1 className="text-2xl font-black text-[#262626]">Leitura de Kits</h1>
-          </div>
-        )}
+    <div className={`min-h-screen transition-colors duration-500 ${isSuccess ? "bg-green-500 p-4" : scanResult ? "bg-transparent p-4" : "bg-transparent"}`}>
+      {/* Quando o scanner está aberto no Mobile, ele vira tela cheia */}
+      {isMobile && !scanResult ? (
+        <div className="fixed inset-0 z-50 bg-black animate-in fade-in duration-300">
+          <div className="relative w-full h-full">
+            <Scanner onSuccess={handleIdentifyItem} />
+            
+            {/* Overlay Superior (Botão Voltar) */}
+            <div className="absolute top-6 left-6 z-[60]">
+               <Link href="/operator/production" className="p-4 bg-white/10 backdrop-blur-md rounded-2xl text-white">
+                  <ArrowLeft size={24} />
+               </Link>
+            </div>
 
-        {!scanResult ? (
-          <div className="space-y-8 text-center pt-10 md:pt-20">
-             <div className="flex flex-col items-center">
-                <div className="bg-purple-50 p-6 md:p-10 rounded-full mb-6">
-                  <Laptop size={isMobile ? 40 : 80} className="text-[#5D286C]" />
-                </div>
-                <h2 className="text-2xl md:text-3xl font-black text-[#262626]">Aguardando Bipe de Kit...</h2>
-                <form onSubmit={(e) => { e.preventDefault(); handleIdentifyItem(manualCode.toUpperCase()); }}>
-                  <input ref={inputRef} type="text" value={manualCode} onChange={(e) => setManualCode(e.target.value)} className="opacity-0 absolute pointer-events-none" autoFocus />
-                </form>
-                <button onClick={() => setShowManualInput(!showManualInput)} className="mt-8 flex items-center gap-2 text-gray-400 font-bold hover:text-[#5D286C]">
-                  <Keyboard size={18} /> {showManualInput ? "Ocultar teclado" : "Digitar código manualmente"}
-                </button>
-                {showManualInput && (
-                  <div className="mt-6 flex w-full max-w-xs gap-2 animate-in slide-in-from-top-2">
-                    <input 
-                      type="text" 
-                      value={manualCode} 
-                      onChange={(e) => setManualCode(e.target.value)} 
-                      className="flex-1 p-4 bg-white border-2 border-gray-100 rounded-2xl outline-none focus:border-[#5D286C] font-bold uppercase shadow-sm"
-                      placeholder="CÓDIGO"
-                    />
-                    <button onClick={() => handleIdentifyItem(manualCode.toUpperCase())} className="bg-[#5D286C] text-white px-6 rounded-2xl font-black text-sm">OK</button>
-                  </div>
-                )}
+            {/* Guia visual fixa no centro */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+              <div className="w-[85%] aspect-[3/2] border-2 border-white/30 rounded-3xl relative">
+                <div className="absolute top-1/2 left-0 w-full h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
               </div>
-              {isMobile && !scanResult && (
-                <div className="mt-8 animate-in fade-in zoom-in duration-500">
-                  <div className="rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white bg-black relative aspect-[3/4] max-h-[60vh]">
-                    <Scanner onSuccess={handleIdentifyItem} />
-                    
-                    {/* Guia visual para Código de Barras */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="w-[80%] h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
-                    </div>
-                    
-                    {/* Moldura de foco */}
-                    <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none" />
+              <p className="text-white font-black text-xs uppercase mt-8 tracking-widest bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm">
+                Aponte para Código de Barras ou QR
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-2xl mx-auto space-y-6">
+          {!scanResult && (
+            <div className="flex items-center gap-4 mb-4">
+              <Link href="/operator/production" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm">
+                <ArrowLeft size={20} />
+              </Link>
+              <h1 className="text-2xl font-black text-[#262626]">Leitura de Kits</h1>
+            </div>
+          )}
+
+          {!scanResult ? (
+            <div className="space-y-8 text-center pt-10 md:pt-20 px-4">
+               <div className="flex flex-col items-center">
+                  <div className="bg-purple-50 p-6 md:p-10 rounded-full mb-6">
+                    <Laptop size={80} className="text-[#5D286C]" />
                   </div>
-                  <p className="text-center text-gray-400 font-bold text-[10px] uppercase mt-4 tracking-widest">
-                    Aponte para o Código de Barras ou QR Code
-                  </p>
+                  <h2 className="text-2xl md:text-3xl font-black text-[#262626]">Aguardando Bipe de Kit...</h2>
+                  
+                  {/* Campo oculto para leitura com leitor USB/Bluetooth no PC */}
+                  <form onSubmit={(e) => { e.preventDefault(); handleIdentifyItem(manualCode.toUpperCase()); }}>
+                    <input ref={inputRef} type="text" value={manualCode} onChange={(e) => setManualCode(e.target.value)} className="opacity-0 absolute pointer-events-none" autoFocus />
+                  </form>
+
+                  <button onClick={() => setShowManualInput(!showManualInput)} className="mt-8 flex items-center gap-2 text-gray-400 font-bold hover:text-[#5D286C]">
+                    <Keyboard size={18} /> {showManualInput ? "Ocultar teclado" : "Digitar código manualmente"}
+                  </button>
+
+                  {showManualInput && (
+                    <div className="mt-6 flex w-full max-w-xs gap-2 animate-in slide-in-from-top-2">
+                      <input 
+                        type="text" 
+                        value={manualCode} 
+                        onChange={(e) => setManualCode(e.target.value)} 
+                        className="flex-1 p-4 bg-white border-2 border-gray-100 rounded-2xl outline-none focus:border-[#5D286C] font-bold uppercase"
+                        placeholder="CÓDIGO"
+                      />
+                      <button onClick={() => handleIdentifyItem(manualCode.toUpperCase())} className="bg-[#5D286C] text-white px-6 rounded-2xl font-black">OK</button>
+                    </div>
+                  )}
                 </div>
-              )}
-          </div>
-        ) : (
-          <div className="p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] text-center space-y-8 animate-in zoom-in duration-300 shadow-2xl bg-white">
-             {isSearching ? (
-               <div className="py-10 flex flex-col items-center">
-                  <Loader2 className="animate-spin text-[#5D286C]" size={40} />
-                  <p className="mt-4 text-[#5D286C] font-black uppercase tracking-widest text-sm">Consultando...</p>
-               </div>
-             ) : error ? (
-               <div className="space-y-6">
-                  <AlertCircle size={60} className="mx-auto text-red-500" />
-                  <h2 className="text-2xl font-black text-gray-900 uppercase">Aviso</h2>
-                  <div className="p-4 bg-red-50 rounded-2xl text-red-600 font-bold text-sm">{error}</div>
-                  <button onClick={() => { setScanResult(null); setError(null); }} className="w-full bg-gray-900 text-white p-5 rounded-3xl font-black">TENTAR NOVAMENTE</button>
-               </div>
-             ) : (
-               <>
-                 <CheckCircle2 size={60} className="mx-auto text-green-500" />
-                 <div>
-                    <h2 className="text-3xl md:text-5xl font-black text-[#262626] mt-2">{itemInfo?.nome}</h2>
-                    <p className="text-green-600 font-bold text-lg mt-2 tracking-tight">Estoque Atual: {itemInfo?.qtd} un</p>
+            </div>
+          ) : (
+            /* Tela de Resultado (Igual ao anterior) */
+            <div className="p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] text-center space-y-8 animate-in zoom-in duration-300 shadow-2xl bg-white mt-10">
+               {isSearching ? (
+                 <div className="py-10 flex flex-col items-center">
+                    <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+                    <p className="mt-4 text-[#5D286C] font-black uppercase tracking-widest text-sm">Consultando...</p>
                  </div>
-                 <div className="space-y-3 pt-4">
-                    <button onClick={confirmarProducao} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-purple-100">
-                      {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : "CONFIRMAR ENTRADA"}
-                    </button>
-                    <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm">CANCELAR</button>
+               ) : error ? (
+                 <div className="space-y-6">
+                    <AlertCircle size={60} className="mx-auto text-red-500" />
+                    <h2 className="text-2xl font-black text-gray-900 uppercase">Aviso</h2>
+                    <div className="p-4 bg-red-50 rounded-2xl text-red-600 font-bold text-sm">{error}</div>
+                    <button onClick={() => { setScanResult(null); setError(null); }} className="w-full bg-gray-900 text-white p-5 rounded-3xl font-black">TENTAR NOVAMENTE</button>
                  </div>
-               </>
-             )}
-          </div>
-        )}
-      </div>
+               ) : (
+                 <>
+                   <CheckCircle2 size={60} className="mx-auto text-green-500" />
+                   <div>
+                      <h2 className="text-3xl md:text-5xl font-black text-[#262626] mt-2">{itemInfo?.nome}</h2>
+                      <p className="text-green-600 font-bold text-lg mt-2 tracking-tight">Estoque Atual: {itemInfo?.qtd} un</p>
+                   </div>
+                   <div className="space-y-3 pt-4">
+                      <button onClick={confirmarProducao} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-purple-100">
+                        {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : "CONFIRMAR ENTRADA"}
+                      </button>
+                      <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-sm uppercase">Cancelar</button>
+                   </div>
+                 </>
+               )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
