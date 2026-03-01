@@ -32,10 +32,12 @@ export default function UsersConfigPage() {
     setLoading(false);
   }
 
-  const filteredUsers = profiles.filter(u => 
-    u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = profiles.filter(u => {
+    const search = searchTerm.toLowerCase();
+    const nameMatch = (u.full_name || "").toLowerCase().includes(search);
+    const emailMatch = (u.email || "").toLowerCase().includes(search);
+    return nameMatch || emailMatch;
+  });
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 p-4">
@@ -80,12 +82,12 @@ export default function UsersConfigPage() {
                   {(user.full_name || user.email)?.[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  {/* Nome aparece em branco se não definido, email sempre aparece abaixo */}
+                  {/* Se o nome for nulo, mostra 'Usuário sem nome' ou o e-mail */}
                   <h3 className="font-black text-[#262626] truncate text-lg min-h-[1.5rem]">
-                    {user.full_name || ""} 
+                    {user.full_name || "Usuário sem nome"} 
                   </h3>
                   <p className="text-sm text-gray-400 font-bold flex items-center gap-1">
-                    <Mail size={12} /> {user.email}
+                    <Mail size={12} /> {user.email || "E-mail não sincronizado"}
                   </p>
                 </div>
               </div>
