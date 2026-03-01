@@ -16,24 +16,31 @@ export default function Scanner({ onSuccess }: ScannerProps) {
         scannerRef.current = html5QrCode;
 
         const config = {
-          fps: 20,
-          // Remova o qrbox ou aumente-o consideravelmente para códigos longos
+          fps: 25, // Equilíbrio entre performance e processamento
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            // Área de leitura retangular ideal para barras
             return { 
-              width: viewfinderWidth * 0.95, 
-              height: viewfinderHeight * 0.4 
+              width: viewfinderWidth * 0.8, 
+              height: viewfinderHeight * 0.3 
             };
           },
-          aspectRatio: 1.777778,
-          // Configurações experimentais que ajudam muito em barcodes de baixa densidade
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true 
+          // Forçamos a câmera a buscar a melhor resolução possível para ver as linhas do código de barras
+          videoConstraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
           },
+          aspectRatio: 1.777778, 
           formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_39, // Padrão
-            Html5QrcodeSupportedFormats.CODE_93, // Versão densa
-            Html5QrcodeSupportedFormats.CODE_128, // Versão logística
-            Html5QrcodeSupportedFormats.QR_CODE
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.CODE_93
           ]
         };
 
