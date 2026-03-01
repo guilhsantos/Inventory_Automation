@@ -166,13 +166,17 @@ export default function ScannerPage() {
                 <div className="mt-8 animate-in fade-in zoom-in duration-500">
                   <div className="rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white bg-black relative aspect-[3/4] max-h-[60vh]">
                     <Scanner onSuccess={handleIdentifyItem} />
-                    {/* Guia visual para código de barras */}
-                    <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
-                      <div className="w-full h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
+                    
+                    {/* Guia visual para Código de Barras */}
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                      <div className="w-[80%] h-0.5 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
                     </div>
+                    
+                    {/* Moldura de foco */}
+                    <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none" />
                   </div>
                   <p className="text-center text-gray-400 font-bold text-[10px] uppercase mt-4 tracking-widest">
-                    Aponte a câmera para o código de barras ou QR Code
+                    Aponte para o Código de Barras ou QR Code
                   </p>
                 </div>
               )}
