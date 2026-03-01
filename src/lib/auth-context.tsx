@@ -58,8 +58,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // CORREÇÃO: Filtramos os eventos para evitar deadlocks no LockManager
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        // Se houver uma sessão válida, atualizamos o usuário independente do evento
+        if (session) {
           await handleUserSession(session);
+        } else if (event === 'SIGNED_OUT') {
+          // Apenas limpamos o estado se for um logout explícito
+          setUser(null);
+          setRole(null);
         }
         setLoading(false);
       }
