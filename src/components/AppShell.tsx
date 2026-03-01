@@ -1,13 +1,16 @@
 "use client";
 
-import { useAuth } from "@/lib/auth-context"; //
-import Sidebar from "@/components/Sidebar"; //
+import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import Sidebar from "@/components/Sidebar";
 import { usePathname } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Menu, X } from "lucide-react";
+import { ToastProvider } from "@/lib/toast-context"; // Importado aqui
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth(); //
+  const { user, loading } = useAuth();
   const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isLoginPage = pathname === "/login";
 
   // 1. Enquanto carrega o estado do usuário
@@ -19,24 +22,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 2. Se for a tela de login, renderiza apenas o conteúdo
-  if (isLoginPage) {
-    return <>{children}</>;
-  }
+  // Definição do conteúdo principal para evitar repetição dentro do Provider
+  const renderContent = () => {
+    if (isLoginPage || !user) {
+      return <>{children}</>;
+    }
 
-  // 3. Se não estiver logado, permitimos renderizar os children para que
-  // o useEffect de redirecionamento nas páginas (ex: page.tsx) funcione.
-  if (!user) {
-    return <>{children}</>;
-  }
+    return (
+      <div className="flex min-h-screen bg-gray-50/50 flex-col md:flex-row">
+        {/* Menu Mobile Header */}
+        <div className="md:hidden bg-white border-b p-4 flex justify-between items-center sticky top-0 z-50">
+          <img src="/logo.jpg" alt="Logo" className="h-8 w-auto" />
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+            {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
+        </div>
 
-  // 4. Se estiver logado, renderiza a estrutura completa com Sidebar
+        {/* Sidebar - Oculta no mobile a menos que aberto */}
+        <div className={`${isMobileMenuOpen ? "block" : "hidden"} md:block fixed md:sticky top-0 z-40 h-full`}>
+          <Sidebar onCloseMobile={() => setIsMobileMenuOpen(false)} />
+        </div>
+
+        {/* Overlay para fechar menu mobile ao clicar fora */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/20 z-30 md:hidden" 
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          {children}
+        </main>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex min-h-screen bg-white">
-      <Sidebar /> 
-      <main className="flex-1 bg-gray-50/30 overflow-y-auto">
-        {children}
-      </main>
-    </div>
+    <ToastProvider>
+      {renderContent()}
+    </ToastProvider>
   );
 }
