@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from "react";
 import { supabase } from "./supabase";
 import { User, Session } from "@supabase/supabase-js";
 
@@ -15,56 +15,59 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
+
+  const resetLogoutTimer = () => {
+    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    // 3.600.000 ms = 1 hora
+    logoutTimerRef.current = setTimeout(() => {
+      handleLogout();
+    }, 3600000);
+  };
+
+  const handleUserSession = async (session: Session | null) => {
+    if (session?.user) {
+      setUser(session.user);
+      resetLogoutTimer();
+      
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+        
+        setRole(data?.role || 'OP_ESTOQUE');
+      } catch {
+        setRole('OP_ESTOQUE');
+      }
+    } else {
+      setUser(null);
+      setRole(null);
+      if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    }
+  };
 
   useEffect(() => {
     const initializeAuth = async () => {
-      try {
-        // Busca a sessão inicial de forma direta
-        const { data: { session } } = await supabase.auth.getSession();
-        await handleUserSession(session);
-      } catch (err) {
-        console.error("Erro na inicialização do Auth:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const handleUserSession = async (session: Session | null) => {
-      if (session?.user) {
-        setUser(session.user);
-        try {
-          const { data, error } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", session.user.id)
-            .single();
-          
-          if (!error && data) {
-            setRole(data.role);
-          } else {
-            setRole('OP_ESTOQUE'); 
-          }
-        } catch { 
-          setRole('OP_ESTOQUE');
-        }
-      } else {
-        setUser(null);
-        setRole(null);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      await handleUserSession(session);
+      setLoading(false);
     };
 
     initializeAuth();
 
-    // CORREÇÃO: Filtramos os eventos para evitar deadlocks no LockManager
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Se houver uma sessão válida, atualizamos o usuário independente do evento
-        if (session) {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await handleUserSession(session);
         } else if (event === 'SIGNED_OUT') {
-          // Apenas limpamos o estado se for um logout explícito
-          setUser(null);
-          setRole(null);
+          handleUserSession(null);
         }
         setLoading(false);
       }
@@ -72,6 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       subscription.unsubscribe();
+      if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
     };
   }, []);
 

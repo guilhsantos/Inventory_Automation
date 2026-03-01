@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Users, Mail, Shield, Search, Loader2, UserPlus, RefreshCw } from "lucide-react";
+import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
 
 export default function UsersConfigPage() {
@@ -17,13 +17,15 @@ export default function UsersConfigPage() {
 
   async function fetchUsers() {
     setLoading(true);
+    // Ordenar por email evita o Erro 400 caso a coluna created_at não esteja indexada ou falhe
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .order("email"); // Ordenar por email é mais seguro se created_at der erro
-        
+      .order("email", { ascending: true });
+    
     if (error) {
       showToast("Erro ao carregar usuários", "error");
+      console.error(error);
     } else {
       setProfiles(data || []);
     }
@@ -47,7 +49,7 @@ export default function UsersConfigPage() {
         </div>
         
         <div className="flex gap-2 w-full md:w-auto">
-           <div className="relative flex-1 md:w-64">
+          <div className="relative flex-1 md:w-64">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
             <input 
               type="text" 
@@ -64,20 +66,21 @@ export default function UsersConfigPage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-gray-50">
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-gray-50 shadow-sm">
           <Loader2 className="animate-spin text-[#5D286C] mb-4" size={40} />
           <p className="text-gray-400 font-black uppercase text-xs tracking-widest">Sincronizando Banco...</p>
         </div>
       ) : (
         <div className="grid gap-4">
           {filteredUsers.map(user => (
-            <div key={user.id} className="bg-white p-6 rounded-[2rem] border border-gray-50 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:shadow-md group">
+            <div key={user.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:shadow-md group">
               <div className="flex items-center gap-4 w-full md:w-auto">
-                {/* Avatar simples com as iniciais */}
+                {/* Avatar com inicial */}
                 <div className="bg-purple-50 text-[#5D286C] w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0 group-hover:scale-105 transition-transform">
                   {(user.full_name || user.email)?.[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
+                  {/* Nome aparece em branco se não definido, email sempre aparece abaixo */}
                   <h3 className="font-black text-[#262626] truncate text-lg min-h-[1.5rem]">
                     {user.full_name || ""} 
                   </h3>
@@ -87,13 +90,11 @@ export default function UsersConfigPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 w-full md:w-auto">
-                <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 flex-1 md:flex-none justify-center">
-                  <Shield size={16} className="text-[#5D286C]" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    {user.role === 'ADMIN' ? 'Administrador' : 'Operador'}
-                  </span>
-                </div>
+              <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 shrink-0">
+                <Shield size={16} className="text-[#5D286C]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                  {user.role === 'ADMIN' ? 'Administrador' : 'Operador'}
+                </span>
               </div>
             </div>
           ))}

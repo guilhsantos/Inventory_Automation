@@ -15,7 +15,7 @@ export default function HomePage() {
       if (!user) {
         router.push("/login");
       } else if (role === 'OP_ESTOQUE') {
-        router.push("/scanner");
+        router.push("/operator/scanner");
       }
     }
   }, [user, role, loading, router]);
@@ -51,7 +51,7 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <Link 
-            href="/scanner" 
+            href="/operator/scanner" 
             className="p-10 bg-white border-2 border-gray-100 rounded-[3rem] hover:border-[#7B1470] transition-all group shadow-sm relative overflow-hidden"
           >
             <div className="bg-[#5D286C] text-white p-5 rounded-3xl w-fit mb-8 group-hover:bg-[#7B1470] transition-colors shadow-lg shadow-purple-100">
