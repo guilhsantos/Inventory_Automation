@@ -20,8 +20,8 @@ export default function UsersConfigPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .order("created_at", { ascending: false });
-    
+      .order("email"); // Ordenar por email é mais seguro se created_at der erro
+        
     if (error) {
       showToast("Erro ao carregar usuários", "error");
     } else {
@@ -78,8 +78,8 @@ export default function UsersConfigPage() {
                   {(user.full_name || user.email)?.[0].toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-black text-[#262626] truncate text-lg">
-                    {user.full_name || "Sem Nome Definido"}
+                  <h3 className="font-black text-[#262626] truncate text-lg min-h-[1.5rem]">
+                    {user.full_name || ""} 
                   </h3>
                   <p className="text-sm text-gray-400 font-bold flex items-center gap-1">
                     <Mail size={12} /> {user.email}
