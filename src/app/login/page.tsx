@@ -17,16 +17,29 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
+    if (authError) {
       setError("E-mail ou senha incorretos.");
       setLoading(false);
-    } else {
-      router.push("/"); 
+    } else if (data.user) {
+      // Busca o perfil para saber o cargo IMEDIATAMENTE após logar
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profile?.role === 'OP_ESTOQUE' || profile?.role === 'OP_PRODUCAO') {
+        router.push("/operator/production");
+      } else if (profile?.role === 'ADMIN') {
+        router.push("/dashboard");
+      } else {
+        router.push("/operator/production");
+      }
     }
   };
 
@@ -34,12 +47,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#FFFFFF] flex flex-col justify-center py-12 px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-10">
-          {/* Apenas o Logo, sem textos acima do formulário */}
-          <img 
-            src="/logo.jpg" 
-            alt="Reauto Logo" 
-            className="h-10 w-auto object-contain"
-          />
+          <img src="/logo.jpg" alt="Reauto Logo" className="h-10 w-auto object-contain" />
         </div>
       </div>
 
@@ -96,9 +104,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="group relative w-full flex justify-center py-5 px-4 border border-transparent rounded-2xl shadow-xl shadow-purple-200 text-lg font-black text-white bg-[#5D286C] hover:bg-[#7B1470] focus:outline-none focus:ring-4 focus:ring-purple-100 transition-all disabled:bg-gray-300 disabled:shadow-none"
               >
-                {loading ? (
-                  <Loader2 className="animate-spin" size={24} />
-                ) : (
+                {loading ? <Loader2 className="animate-spin" size={24} /> : (
                   <>
                     ACESSAR SISTEMA
                     <ArrowRight className="ml-2 group-hover:translate-x-2 transition-transform" />
