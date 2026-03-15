@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -24,7 +25,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const resetLogoutTimer = () => {
     if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-    // 3.600.000 ms = 1 hora
     logoutTimerRef.current = setTimeout(() => {
       handleLogout();
     }, 3600000);
@@ -36,13 +36,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       resetLogoutTimer();
       
       try {
-        const { data } = await supabase
+        // Timeout de 3 segundos para a query do profile
+        const profileTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Profile query timeout")), 3000)
+        );
+
+        const profilePromise = supabase
           .from("profiles")
           .select("role")
           .eq("id", session.user.id)
           .single();
-        
-        setRole(data?.role || 'OP_ESTOQUE');
+
+        const result = await Promise.race([profilePromise, profileTimeout]) as any;
+        setRole(result?.data?.role || 'OP_ESTOQUE');
       } catch {
         setRole('OP_ESTOQUE');
       }
@@ -54,10 +60,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      await handleUserSession(session);
+    // Timeout de segurança: força loading = false após 5 segundos
+    authTimeoutRef.current = setTimeout(() => {
+      console.warn("Auth initialization timeout - forcing loading false");
       setLoading(false);
+    }, 5000);
+
+    const initializeAuth = async () => {
+      try {
+        // Timeout de 3 segundos para getSession
+        const sessionTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Session timeout")), 3000)
+        );
+
+        const sessionPromise = supabase.auth.getSession();
+        const result = await Promise.race([sessionPromise, sessionTimeout]) as any;
+        
+        if (result?.data?.session) {
+          await handleUserSession(result.data.session);
+        } else {
+          await handleUserSession(null);
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+        await handleUserSession(null);
+      } finally {
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current);
+          authTimeoutRef.current = null;
+        }
+        setLoading(false);
+      }
     };
 
     initializeAuth();
@@ -76,6 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       subscription.unsubscribe();
       if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+      if (authTimeoutRef.current) clearTimeout(authTimeoutRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

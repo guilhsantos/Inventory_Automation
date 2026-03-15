@@ -35,6 +35,11 @@ export default function OperatorDashboardPage() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
 
+  // Log para debug
+  useEffect(() => {
+    console.log("Dashboard mounted - authLoading:", authLoading, "user:", user, "loading:", loading);
+  }, [authLoading, user, loading]);
+
   const playNotification = useCallback(() => {
     try {
       const audio = new Audio("/success.mp3");
@@ -112,12 +117,14 @@ export default function OperatorDashboardPage() {
   }, [user]);
 
   useEffect(() => {
-    // Timeout de segurança: se authLoading ficar true por mais de 5 segundos, forçar loading false
+    console.log("AuthLoading changed:", authLoading);
+    
+    // Timeout mais curto: 3 segundos
     if (authLoading) {
       timeoutRef.current = setTimeout(() => {
         console.warn("Auth loading timeout - forcing continue");
         setLoading(false);
-      }, 5000);
+      }, 3000);
     } else {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -148,18 +155,28 @@ export default function OperatorDashboardPage() {
   }, [loading, orders.length]);
 
   useEffect(() => {
+    console.log("Main useEffect - authLoading:", authLoading, "user:", user);
+    
     // Aguardar autenticação antes de buscar dados
-    if (authLoading) return;
+    if (authLoading) {
+      console.log("Waiting for auth...");
+      return;
+    }
     
     if (!user) {
+      console.log("No user, redirecting to login");
       router.push("/login");
       return;
     }
 
     // Evitar múltiplas inicializações
-    if (hasInitializedRef.current) return;
+    if (hasInitializedRef.current) {
+      console.log("Already initialized, skipping");
+      return;
+    }
+    
+    console.log("Initializing fetchOrders and Realtime");
     hasInitializedRef.current = true;
-
     fetchOrders();
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
