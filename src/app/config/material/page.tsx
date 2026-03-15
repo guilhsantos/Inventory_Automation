@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Plus, Database, Save, Calendar } from "lucide-react";
+import { Loader2, Plus, Database, Save, Calendar, Package } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
 
 export default function MaterialConfigPage() {
   const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<'entry' | 'types'>('entry');
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState<any[]>([]);
   
@@ -17,6 +18,7 @@ export default function MaterialConfigPage() {
   const [selectedMatId, setSelectedMatId] = useState("");
   const [addQty, setAddQty] = useState("");
   const [arrivalDate, setArrivalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchMaterials();
@@ -42,9 +44,11 @@ export default function MaterialConfigPage() {
     }
   };
 
-  const handleSaveEntry = async () => {
+  const handleSaveEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedMatId || !addQty || !arrivalDate) return;
     
+    setIsSubmitting(true);
     const qtyNum = parseFloat(addQty);
     const material = materials.find(m => m.id === parseInt(selectedMatId));
 
@@ -63,61 +67,153 @@ export default function MaterialConfigPage() {
       });
 
       showToast("Entrada de estoque salva!");
+      setSelectedMatId("");
       setAddQty("");
+      setArrivalDate(new Date().toISOString().split('T')[0]);
       fetchMaterials();
     } catch (err: any) {
       showToast("Erro ao salvar entrada: " + err.message, "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  if (loading) return <Loader2 className="animate-spin mx-auto mt-20" />;
+  if (loading) return <Loader2 className="animate-spin mx-auto mt-20" size={40} />;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 p-2 md:p-4">
+    <div className="max-w-4xl mx-auto space-y-10 p-4">
       <h1 className="text-3xl font-black text-[#262626]">Gestão de Matéria-Prima</h1>
       
-      <div className="grid md:grid-cols-2 gap-6">
-        <form onSubmit={handleCreateMaterial} className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 h-fit">
-          <h2 className="text-xl font-black flex items-center gap-2 text-[#5D286C]"><Database size={20}/> Novo Tipo</h2>
-          <input 
-            required 
-            value={newMatName} 
-            onChange={e => setNewMatName(e.target.value)}
-            className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
-            placeholder="Ex: PP Azul Royal"
-          />
-          <button type="submit" className="w-full bg-[#5D286C] text-white p-4 rounded-2xl font-black shadow-lg">CADASTRAR</button>
-        </form>
-
-        <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
-          <h2 className="text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus size={20}/> Registrar Entrada</h2>
-          <select 
-            value={selectedMatId} 
-            onChange={e => setSelectedMatId(e.target.value)}
-            className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] appearance-none"
-          >
-            <option value="">Selecione o material...</option>
-            {materials.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-          </select>
-          <div className="grid grid-cols-2 gap-3">
-            <input type="number" value={addQty} onChange={e => setAddQty(e.target.value)} className="p-4 bg-gray-50 rounded-2xl font-bold outline-none" placeholder="KG" />
-            <input type="date" value={arrivalDate} onChange={e => setArrivalDate(e.target.value)} className="p-4 bg-gray-50 rounded-2xl font-bold outline-none" />
-          </div>
-          <button onClick={handleSaveEntry} className="w-full bg-[#262626] text-white p-4 rounded-2xl font-black shadow-lg">SALVAR ENTRADA</button>
-        </div>
+      {/* Abas */}
+      <div className="inline-flex gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase">
+        <button
+          onClick={() => setActiveTab('entry')}
+          className={`px-3 py-2 rounded-2xl transition-all ${
+            activeTab === 'entry'
+              ? "bg-white text-[#5D286C] shadow-sm"
+              : "text-gray-400"
+          }`}
+        >
+          REGISTRAR ENTRADA
+        </button>
+        <button
+          onClick={() => setActiveTab('types')}
+          className={`px-3 py-2 rounded-2xl transition-all ${
+            activeTab === 'types'
+              ? "bg-white text-[#5D286C] shadow-sm"
+              : "text-gray-400"
+          }`}
+        >
+          TIPOS DE MATERIAL
+        </button>
       </div>
 
-      <div className="space-y-4">
-        <h2 className="text-xl font-black px-2">Estoques Atuais</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {materials.map(m => (
-            <div key={m.id} className="bg-white p-5 rounded-[1.5rem] border border-gray-100 shadow-sm">
-              <p className="font-black text-[#262626]">{m.nome}</p>
-              <p className="text-2xl font-black text-[#5D286C] mt-2">{m.estoque_kg.toFixed(2)} <span className="text-sm">KG</span></p>
+      {activeTab === 'entry' ? (
+        <div className="grid md:grid-cols-2 gap-10 animate-in fade-in duration-500">
+          {/* Formulário de Entrada */}
+          <form onSubmit={handleSaveEntry} className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit">
+            <h2 className="text-2xl font-black flex items-center gap-3"><Plus className="text-[#5D286C]" /> Entrada de Material</h2>
+            
+            <div className="space-y-2">
+              <label className="text-xs font-black text-gray-400 uppercase ml-2">Material</label>
+              <select 
+                required
+                value={selectedMatId} 
+                onChange={e => setSelectedMatId(e.target.value)}
+                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] appearance-none"
+              >
+                <option value="">Selecione o material...</option>
+                {materials.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
             </div>
-          ))}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-gray-400 uppercase ml-2">Quantidade (KG)</label>
+                <input 
+                  required
+                  type="number" 
+                  step="0.01"
+                  value={addQty} 
+                  onChange={e => setAddQty(e.target.value)} 
+                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                  placeholder="0.00" 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black text-gray-400 uppercase ml-2">Data de Chegada</label>
+                <input 
+                  required
+                  type="date" 
+                  value={arrivalDate} 
+                  onChange={e => setArrivalDate(e.target.value)} 
+                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                />
+              </div>
+            </div>
+
+            <button 
+              disabled={isSubmitting} 
+              type="submit" 
+              className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black flex items-center justify-center gap-3 shadow-lg"
+            >
+              {isSubmitting ? <Loader2 className="animate-spin"/> : <><Save size={20} /> SALVAR ENTRADA</>}
+            </button>
+          </form>
+
+          {/* Listagem de Estoque */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-black flex items-center gap-3"><Package className="text-[#5D286C]" /> Estoque</h2>
+            <div className="space-y-3">
+              {materials.map(m => (
+                <div key={m.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
+                  <p className="font-black text-[#262626]">{m.nome}</p>
+                  <p className="text-2xl font-black text-[#5D286C] mt-2">
+                    {parseFloat(m.estoque_kg || 0).toFixed(2)} <span className="text-sm font-bold">KG</span>
+                  </p>
+                </div>
+              ))}
+              {materials.length === 0 && (
+                <p className="text-gray-400 font-bold text-center py-10">Nenhum material cadastrado.</p>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-6 animate-in fade-in duration-500">
+          <form onSubmit={handleCreateMaterial} className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit">
+            <h2 className="text-2xl font-black flex items-center gap-3"><Database className="text-[#5D286C]" /> Novo Tipo</h2>
+            <div className="space-y-2">
+              <label className="text-xs font-black text-gray-400 uppercase ml-2">Nome do Material</label>
+              <input 
+                required 
+                value={newMatName} 
+                onChange={e => setNewMatName(e.target.value)}
+                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                placeholder="Ex: PP Azul Royal"
+              />
+            </div>
+            <button type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black flex items-center justify-center gap-3 shadow-lg">
+              <Save size={20} /> CADASTRAR
+            </button>
+          </form>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-black flex items-center gap-3"><Database className="text-[#5D286C]" /> Tipos Cadastrados</h2>
+            <div className="space-y-3">
+              {materials.map(m => (
+                <div key={m.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="font-black text-[#262626]">{m.nome}</p>
+                  <p className="text-sm font-bold text-gray-400 mt-1">{parseFloat(m.estoque_kg || 0).toFixed(2)} KG em estoque</p>
+                </div>
+              ))}
+              {materials.length === 0 && (
+                <p className="text-center text-gray-400 font-bold py-10">Nenhum tipo de material cadastrado.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,28 +3,67 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
-import { ShoppingCart, Plus, Trash2, Save, ArrowLeft, Calendar, User, Hash, Star } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Save, ArrowLeft, Calendar, User, Hash, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
-export default function NewOrderPage() {
+export default function EditOrderPage() {
   const { showToast } = useToast();
   const router = useRouter();
+  const params = useParams();
+  const orderId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
   
   // Dados do Pedido
-  const [orderData, setOrderData] = useState({ code: '', client: '', deliveryDate: '', notes: '', isPriority: false });
+  const [orderData, setOrderData] = useState({ code: '', client: '', deliveryDate: '', notes: '' });
   const [availableKits, setAvailableKits] = useState<any[]>([]);
   const [selectedKits, setSelectedKits] = useState<{kit_id: number, qty: number}[]>([]);
   const [currentKitSelection, setCurrentKitSelection] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchKits();
-  }, []);
+    if (orderId) {
+      fetchOrder();
+      fetchKits();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
 
   async function fetchKits() {
     const { data } = await supabase.from("kits").select("id, nome_kit, codigo_unico").order("nome_kit");
     if (data) setAvailableKits(data);
+  }
+
+  async function fetchOrder() {
+    setLoading(true);
+    try {
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select("*, order_items(quantidade, kit_id)")
+        .eq("id", orderId)
+        .single();
+
+      if (error) throw error;
+
+      setOrderData({
+        code: order.codigo_unico,
+        client: order.cliente,
+        deliveryDate: order.data_entrega || '',
+        notes: order.notes || ''
+      });
+
+      setSelectedKits(
+        order.order_items?.map((item: any) => ({
+          kit_id: item.kit_id,
+          qty: item.quantidade
+        })) || []
+      );
+    } catch (err: any) {
+      showToast("Erro ao carregar pedido: " + err.message, "error");
+      router.push("/orders/list");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const handleAddKit = () => {
@@ -47,43 +86,25 @@ export default function NewOrderPage() {
     setIsSubmitting(true);
 
     try {
-      // Calcular priority_position se for prioridade
-      let priorityPosition = 0;
-      if (orderData.isPriority) {
-        const { data: priorities } = await supabase
-          .from("orders")
-          .select("priority_position")
-          .eq("status", "Pendente")
-          .eq("is_priority", true);
-
-        if (priorities && priorities.length > 0) {
-          const positions = priorities.map((p: any) => p.priority_position || 0);
-          const max = Math.max(...positions);
-          priorityPosition = max + 1;
-        } else {
-          priorityPosition = 1;
-        }
-      }
-
-      // 1. Criar o Pedido
-      const { data: order, error: orderErr } = await supabase
+      // 1. Atualizar o Pedido
+      const { error: orderErr } = await supabase
         .from("orders")
-        .insert({
+        .update({
           codigo_unico: orderData.code,
           cliente: orderData.client,
           data_entrega: orderData.deliveryDate,
-          status: 'Pendente',
-          notes: orderData.notes || null,
-          is_priority: orderData.isPriority,
-          priority_position: priorityPosition
+          notes: orderData.notes || null
         })
-        .select().single();
+        .eq("id", orderId);
 
       if (orderErr) throw orderErr;
 
-      // 2. Criar os Itens do Pedido
+      // 2. Deletar itens antigos
+      await supabase.from("order_items").delete().eq("order_id", orderId);
+
+      // 3. Criar novos itens
       const items = selectedKits.map(item => ({
-        order_id: order.id,
+        order_id: parseInt(orderId),
         kit_id: item.kit_id,
         quantidade: item.qty
       }));
@@ -91,7 +112,7 @@ export default function NewOrderPage() {
       const { error: itemsErr } = await supabase.from("order_items").insert(items);
       if (itemsErr) throw itemsErr;
 
-      showToast("Pedido registrado com sucesso!");
+      showToast("Pedido atualizado com sucesso!");
       router.push("/orders/list");
     } catch (err: any) {
       showToast(err.message || "Erro ao salvar pedido", "error");
@@ -100,13 +121,21 @@ export default function NewOrderPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 p-4">
       <div className="flex items-center gap-4">
-        <Link href="/orders" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm transition-all">
+        <Link href="/orders/list" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm transition-all">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-3xl font-black text-[#262626]">Novo Pedido</h1>
+        <h1 className="text-3xl font-black text-[#262626]">Editar Pedido</h1>
       </div>
 
       <form onSubmit={handleSaveOrder} className="space-y-6">
@@ -154,18 +183,6 @@ export default function NewOrderPage() {
               className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] min-h-[100px]" 
               placeholder="Observações adicionais sobre o pedido..."
             />
-          </div>
-          <div className="flex items-center gap-3 p-4 bg-red-50 rounded-2xl border-2 border-red-100">
-            <input
-              type="checkbox"
-              id="priority"
-              checked={orderData.isPriority}
-              onChange={e => setOrderData({...orderData, isPriority: e.target.checked})}
-              className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
-            />
-            <label htmlFor="priority" className="flex items-center gap-2 text-sm font-black text-red-600 cursor-pointer">
-              <Star size={16} /> Marcar como Prioridade
-            </label>
           </div>
         </div>
 
@@ -236,9 +253,10 @@ export default function NewOrderPage() {
           disabled={isSubmitting}
           className="w-full bg-[#5D286C] text-white p-6 rounded-3xl font-black text-xl shadow-xl hover:bg-[#7B1470] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
         >
-          {isSubmitting ? "SALVANDO..." : <><Save size={24} /> FINALIZAR PEDIDO</>}
+          {isSubmitting ? "SALVANDO..." : <><Save size={24} /> SALVAR ALTERAÇÕES</>}
         </button>
       </form>
     </div>
   );
 }
+

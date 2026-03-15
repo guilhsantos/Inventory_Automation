@@ -132,10 +132,28 @@ export default function KitsConfigPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 p-2 md:p-4">
-      {/* Abas - Ajustadas para ocupar 100% no mobile */}
-      <div className="flex bg-white p-1.5 rounded-2xl md:rounded-3xl border-2 border-gray-50 shadow-sm w-full md:w-fit">
-        <button onClick={() => setActiveTab('kits')} className={`flex-1 md:flex-none px-4 md:px-8 py-2.5 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all ${activeTab === 'kits' ? 'bg-[#5D286C] text-white shadow-lg shadow-purple-100' : 'text-gray-400'}`}>KITS</button>
-        <button onClick={() => setActiveTab('moldes')} className={`flex-1 md:flex-none px-4 md:px-8 py-2.5 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all ${activeTab === 'moldes' ? 'bg-[#5D286C] text-white shadow-lg shadow-purple-100' : 'text-gray-400'}`}>MOLDES (PEÇAS)</button>
+      {/* Abas */}
+      <div className="inline-flex gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase">
+        <button 
+          onClick={() => setActiveTab('kits')} 
+          className={`px-3 py-2 rounded-2xl transition-all ${
+            activeTab === 'kits'
+              ? "bg-white text-[#5D286C] shadow-sm"
+              : "text-gray-400"
+          }`}
+        >
+          KITS
+        </button>
+        <button 
+          onClick={() => setActiveTab('moldes')} 
+          className={`px-3 py-2 rounded-2xl transition-all ${
+            activeTab === 'moldes'
+              ? "bg-white text-[#5D286C] shadow-sm"
+              : "text-gray-400"
+          }`}
+        >
+          MOLDES (PEÇAS)
+        </button>
       </div>
 
       {activeTab === 'moldes' ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { CheckCircle2, Laptop, Loader2, AlertCircle, Keyboard, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Laptop, Loader2, AlertCircle, Keyboard, ArrowLeft, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
@@ -23,6 +23,7 @@ export default function ScannerPage() {
   const [isSearching, setIsSearching] = useState(false); 
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
@@ -97,11 +98,64 @@ export default function ScannerPage() {
     if (!itemInfo || !user) return;
     setIsProcessing(true);
     try {
+      // 1. Buscar kit_items do kit com informações dos moldes
+      const { data: kitItems, error: kitItemsError } = await supabase
+        .from('kit_items')
+        .select('molde_id, quantidade, moldes(nome, estoque_atual)')
+        .eq('kit_id', itemInfo.id);
+
+      if (kitItemsError) throw kitItemsError;
+
+      // 2. Verificar estoque de cada molde
+      const missingParts: string[] = [];
+      if (kitItems && kitItems.length > 0) {
+        for (const item of kitItems) {
+          const molde = item.moldes as any;
+          const requiredQty = item.quantidade || 0;
+          const availableQty = molde?.estoque_atual || 0;
+
+          if (availableQty < requiredQty) {
+            const missing = requiredQty - availableQty;
+            missingParts.push(`${molde?.nome || 'Peça desconhecida'}\nFaltam: ${missing} unidade(s)`);
+          }
+        }
+      }
+
+      // 3. Se faltar estoque, mostrar modal de erro
+      if (missingParts.length > 0) {
+        playError();
+        const errorMsg = `Não há peças avulsas suficientes para produzir este kit.\n\nFaltam:\n${missingParts.join('\n')}`;
+        setValidationError(errorMsg);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 4. Se tiver estoque, descontar moldes e adicionar kit
+      // Descontar peças avulsas (moldes)
+      if (kitItems && kitItems.length > 0) {
+        for (const item of kitItems) {
+          const molde = item.moldes as any;
+          const requiredQty = item.quantidade || 0;
+          const currentStock = molde?.estoque_atual || 0;
+          const newStock = currentStock - requiredQty;
+
+          const { error: moldeError } = await supabase
+            .from('moldes')
+            .update({ estoque_atual: newStock })
+            .eq('id', item.molde_id);
+
+          if (moldeError) throw moldeError;
+        }
+      }
+
+      // Adicionar kit ao estoque
       const { error: updateError } = await supabase
         .from('kits')
         .update({ estoque_atual: itemInfo.qtd + 1 }) 
         .eq('id', itemInfo.id);
       if (updateError) throw updateError;
+
+      // Registrar movimento de estoque
       await supabase.from('stock_movements').insert({
         kit_id: itemInfo.id,
         user_id: user.id,
@@ -109,15 +163,23 @@ export default function ScannerPage() {
         quantity: 1,
         notes: 'Entrada via scanner'
       });
+
+      playSuccess();
       setScanResult(null);
       setItemInfo(null);
-      showToast("Produção registrada!");
+      showToast("Produção registrada! Peças avulsas descontadas.");
     } catch (err: any) {
       playError();
       showToast(`Erro: ${err.message}`, "error");
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleCloseErrorModal = () => {
+    setValidationError(null);
+    setScanResult(null);
+    setItemInfo(null);
   };
 
   return (
@@ -220,6 +282,37 @@ export default function ScannerPage() {
                 </button>
              </div>
            )}
+        </div>
+      )}
+
+      {/* Modal de Erro de Validação */}
+      {validationError && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-8 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={handleCloseErrorModal}
+              className="absolute top-6 right-6 text-gray-400 hover:text-gray-600"
+            >
+              <X size={24} />
+            </button>
+            <div className="text-center space-y-6">
+              <AlertCircle size={60} className="mx-auto text-red-500" />
+              <div>
+                <h2 className="text-2xl font-black text-[#262626] mb-4">Erro de Validação</h2>
+                <div className="bg-red-50 p-4 rounded-2xl text-left">
+                  <p className="text-sm font-bold text-red-600 whitespace-pre-line">
+                    {validationError}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseErrorModal}
+                className="w-full bg-red-600 text-white p-4 rounded-2xl font-black hover:bg-red-700 transition-all"
+              >
+                VOLTAR PARA BIPAGEM
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

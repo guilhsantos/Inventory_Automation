@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Hammer, Package, AlertTriangle } from "lucide-react";
+import { Hammer, Package, AlertTriangle, CheckCircle } from "lucide-react";
 
 export default function OperatorProductionPage() {
   const actions = [
@@ -26,6 +26,13 @@ export default function OperatorProductionPage() {
       path: "/operator/defects",
       color: "bg-red-600",
     },
+    {
+      title: "Baixa de Pedido",
+      description: "Concluir pedidos pendentes com foto",
+      icon: <CheckCircle size={40} />,
+      path: "/operator/checkout",
+      color: "bg-green-600",
+    },
   ];
 
   return (
@@ -35,7 +42,7 @@ export default function OperatorProductionPage() {
         <p className="text-gray-500 font-bold mt-2">Selecione a atividade que deseja realizar agora.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {actions.map((action) => (
           <Link 
             key={action.title} 

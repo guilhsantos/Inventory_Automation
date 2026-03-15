@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { 
   LayoutDashboard, QrCode, Settings, LogOut, 
   User, ChevronLeft, ChevronRight, ShoppingCart,
-  ChevronDown, Package, Cpu, Box, Users, PlusCircle, List
+  ChevronDown, Package, Cpu, Box, Users, PlusCircle, List,
+  TrendingUp, Eye, Warehouse
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,10 +22,21 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
+    if (isLoggingOut) return; // Prevenir múltiplos cliques
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('reauto-inventory-auth');
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      // Forçar redirecionamento mesmo em caso de erro
+      localStorage.clear();
+      window.location.href = "/login";
+    }
   };
 
   const toggleSubmenu = (name: string) => {
@@ -34,7 +46,17 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
   if (loading || !user) return null;
 
   const menuItems = [
-    { name: "Dashboard", icon: <LayoutDashboard size={22} />, path: "/dashboard", roles: ["ADMIN"] },
+    { 
+      name: "Dashboard", 
+      icon: <LayoutDashboard size={22} />, 
+      path: "/dashboard/visao-geral", 
+      roles: ["ADMIN"],
+      subItems: [
+        { name: "Visão Geral", path: "/dashboard/visao-geral", icon: <Eye size={18} /> },
+        { name: "Performance", path: "/dashboard/performance", icon: <TrendingUp size={18} /> },
+        { name: "Estoque", path: "/dashboard/estoque", icon: <Warehouse size={18} /> },
+      ]
+    },
     { 
       name: "Pedidos", 
       icon: <ShoppingCart size={22} />, 
@@ -48,8 +70,12 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     { 
       name: "Operador", 
       icon: <QrCode size={22} />, 
-      path: "/operator/production", 
+      path: "/operator/dashboard", 
       roles: ["ADMIN", "OP_ESTOQUE"],
+      subItems: [
+        { name: "Dashboard", path: "/operator/dashboard", icon: <LayoutDashboard size={18} /> },
+        { name: "Operação", path: "/operator/production", icon: <QrCode size={18} /> },
+      ]
     },
     { 
       name: "Configurações", 
@@ -137,9 +163,13 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
             </div>
           )}
         </div>
-        <button onClick={handleLogout} className="w-full flex items-center gap-3 p-4 text-[#44213F] font-bold hover:bg-red-50 hover:text-red-600 rounded-2xl transition-all">
+        <button 
+          onClick={handleLogout} 
+          disabled={isLoggingOut}
+          className="w-full flex items-center gap-3 p-4 text-[#44213F] font-bold hover:bg-red-50 hover:text-red-600 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <LogOut size={20} />
-          {!isCollapsed && <span>Sair</span>}
+          {!isCollapsed && <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>}
         </button>
       </div>
     </aside>

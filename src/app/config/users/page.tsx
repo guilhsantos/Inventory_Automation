@@ -19,7 +19,10 @@ export default function UsersConfigPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { 
+    fetchUsers(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function fetchUsers() {
     setLoading(true);
