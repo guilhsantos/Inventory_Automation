@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { 
@@ -18,11 +18,43 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ onCloseMobile }: SidebarProps) {
-  const { user, role, loading } = useAuth();
+  const { user, role: contextRole, loading } = useAuth();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [currentRole, setCurrentRole] = useState<string | null>(contextRole);
+
+  // Sincronizar role do contexto
+  useEffect(() => {
+    setCurrentRole(contextRole);
+  }, [contextRole]);
+
+  // Re-verificar role periodicamente para garantir que está atualizado
+  useEffect(() => {
+    if (!user) return;
+    
+    const checkRole = async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        
+        if (data?.role) {
+          setCurrentRole(data.role);
+        }
+      } catch (err) {
+        console.error("Error checking role:", err);
+      }
+    };
+    
+    checkRole();
+    const interval = setInterval(checkRole, 30000); // Verificar a cada 30s
+    
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogout = async () => {
     if (isLoggingOut) return; // Prevenir múltiplos cliques
@@ -43,7 +75,8 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     setOpenSubmenu(openSubmenu === name ? null : name);
   };
 
-  if (loading || !user) return null;
+  // Não retornar null - sempre mostrar sidebar se tiver user, mesmo durante loading
+  if (!user) return null;
 
   const menuItems = [
     { 
@@ -103,7 +136,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
 
       <nav className="flex-1 p-3 space-y-1 mt-4 overflow-y-auto">
         {menuItems.map((item) => {
-          if (!item.roles.includes(role || "")) return null;
+          if (!item.roles.includes(currentRole || "")) return null;
           
           const hasSubItems = !!item.subItems;
           const isActive = pathname.startsWith(item.path);
@@ -159,7 +192,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
           {!isCollapsed && (
             <div className="overflow-hidden">
               <p className="text-sm font-black text-[#262626] truncate uppercase">{user.email?.split("@")[0]}</p>
-              <p className="text-[10px] font-bold text-[#5D286C] uppercase tracking-widest">{role}</p>
+              <p className="text-[10px] font-bold text-[#5D286C] uppercase tracking-widest">{currentRole || "Carregando..."}</p>
             </div>
           )}
         </div>

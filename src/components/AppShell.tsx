@@ -14,8 +14,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isLoginPage = pathname === "/login";
 
-  // 1. Enquanto carrega o estado do usuário
-  if (loading) {
+  // 1. Enquanto carrega o estado do usuário - só mostrar loading se não tiver user
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <Loader2 className="animate-spin text-[#5D286C]" size={40} />
@@ -25,7 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Definição do conteúdo principal para evitar repetição dentro do Provider
   const renderContent = () => {
-    if (isLoginPage || !user) {
+    if (isLoginPage || (!user && !loading)) {
       return <>{children}</>;
     }
 
