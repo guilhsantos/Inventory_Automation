@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle, Package, Clock, Volume2, TrendingUp, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
@@ -25,89 +27,166 @@ type OperatorOrder = {
 };
 
 export default function OperatorDashboardPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Aguardar autenticação antes de buscar dados
+    if (authLoading) return;
+    
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
     fetchOrders();
 
-    const channel = supabase
-      .channel("operator-orders")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        (payload) => {
-          const newRecord = payload.new as { status?: string; is_priority?: boolean } | null;
-          const oldRecord = payload.old as { is_priority?: boolean } | null;
-          
-          if (newRecord?.status === "Pendente") {
-            playNotification();
-            fetchOrders();
-          }
-          if (oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
-            playNotification();
-            fetchOrders();
-          }
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let interval: NodeJS.Timeout | null = null;
 
-    const interval = setInterval(fetchOrders, 30000);
+    try {
+      channel = supabase
+        .channel("operator-orders")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders" },
+          (payload) => {
+            const newRecord = payload.new as { status?: string; is_priority?: boolean } | null;
+            const oldRecord = payload.old as { is_priority?: boolean } | null;
+            
+            if (newRecord?.status === "Pendente") {
+              playNotification();
+              fetchOrders();
+            }
+            if (oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
+              playNotification();
+              fetchOrders();
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            console.log("Realtime subscribed");
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("Realtime channel error");
+          }
+        });
+
+      interval = setInterval(fetchOrders, 30000);
+    } catch (err) {
+      console.error("Error setting up realtime:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      if (interval) {
+        clearInterval(interval);
+      }
     };
-  }, []);
+  }, [user, authLoading, router]);
 
   const playNotification = () => {
     try {
       const audio = new Audio("/success.mp3");
-      audio.play();
+      audio.play().catch(() => {
+        // Ignorar erros de áudio
+      });
     } catch {
-      // ignore
+      // Ignorar erros
     }
   };
 
   async function fetchOrders() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("orders")
-      .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
-      .eq("status", "Pendente")
-      .order("is_priority", { ascending: false })
-      .order("priority_position", { ascending: true, nullsFirst: true })
-      .order("created_at", { ascending: true });
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data, error: queryError } = await supabase
+        .from("orders")
+        .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
+        .eq("status", "Pendente")
+        .order("is_priority", { ascending: false })
+        .order("priority_position", { ascending: true, nullsFirst: true })
+        .order("created_at", { ascending: true });
 
-    if (!error && data) {
-      // Calcular porcentagem de estoque para cada pedido
-      const ordersWithStock = data.map((order: any) => {
-        let totalNeeded = 0;
-        let totalAvailable = 0;
-        
-        order.order_items?.forEach((item: any) => {
-          const needed = item.quantidade || 0;
-          const available = item.kits?.estoque_atual || 0;
-          totalNeeded += needed;
-          totalAvailable += Math.min(needed, available);
+      if (queryError) {
+        console.error("Error fetching orders:", queryError);
+        setError(queryError.message);
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        // Calcular porcentagem de estoque para cada pedido
+        const ordersWithStock = data.map((order: any) => {
+          let totalNeeded = 0;
+          let totalAvailable = 0;
+          
+          order.order_items?.forEach((item: any) => {
+            const needed = item.quantidade || 0;
+            const available = item.kits?.estoque_atual || 0;
+            totalNeeded += needed;
+            totalAvailable += Math.min(needed, available);
+          });
+          
+          const stockPercentage = totalNeeded > 0 ? Math.round((totalAvailable / totalNeeded) * 100) : 100;
+          
+          return { ...order, stockPercentage };
         });
         
-        const stockPercentage = totalNeeded > 0 ? Math.round((totalAvailable / totalNeeded) * 100) : 100;
-        
-        return { ...order, stockPercentage };
-      });
-      
-      setOrders(ordersWithStock as OperatorOrder[]);
-    } else {
+        setOrders(ordersWithStock as OperatorOrder[]);
+      } else {
+        setOrders([]);
+      }
+    } catch (err: any) {
+      console.error("Unexpected error:", err);
+      setError(err?.message || "Erro ao carregar pedidos");
       setOrders([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
-  if (loading) {
+  // Aguardar autenticação
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="animate-spin text-[#5D286C]" size={48} />
+      </div>
+    );
+  }
+
+  // Mostrar loading enquanto busca dados
+  if (loading && orders.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="animate-spin text-[#5D286C]" size={48} />
+      </div>
+    );
+  }
+
+  // Mostrar erro se houver
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center space-y-4">
+          <AlertTriangle className="mx-auto text-red-500" size={48} />
+          <p className="text-lg font-bold text-red-600">{error}</p>
+          <button
+            onClick={fetchOrders}
+            className="px-4 py-2 bg-[#5D286C] text-white rounded-lg font-bold"
+          >
+            Tentar Novamente
+          </button>
+        </div>
       </div>
     );
   }
