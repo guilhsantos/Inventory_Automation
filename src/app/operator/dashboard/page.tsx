@@ -52,17 +52,25 @@ export default function OperatorDashboardPage() {
       return;
     }
     
+    // Timeout de 5 segundos para a query
+    const queryTimeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Query timeout após 5 segundos")), 5000)
+    );
+
     try {
       setLoading(true);
       setError(null);
       
-      const { data, error: queryError } = await supabase
+      const queryPromise = supabase
         .from("orders")
         .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
         .eq("status", "Pendente")
         .order("is_priority", { ascending: false })
         .order("priority_position", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: true });
+
+      const result = await Promise.race([queryPromise, queryTimeout]) as any;
+      const { data, error: queryError } = result;
 
       if (queryError) {
         console.error("Error fetching orders:", queryError);
@@ -104,12 +112,12 @@ export default function OperatorDashboardPage() {
   }, [user]);
 
   useEffect(() => {
-    // Timeout de segurança: se authLoading ficar true por mais de 10 segundos, forçar loading false
+    // Timeout de segurança: se authLoading ficar true por mais de 5 segundos, forçar loading false
     if (authLoading) {
       timeoutRef.current = setTimeout(() => {
         console.warn("Auth loading timeout - forcing continue");
         setLoading(false);
-      }, 10000);
+      }, 5000);
     } else {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -123,6 +131,21 @@ export default function OperatorDashboardPage() {
       }
     };
   }, [authLoading]);
+
+  // Timeout geral de segurança: força renderização após 8 segundos
+  useEffect(() => {
+    const globalTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("Global loading timeout - forcing render");
+        setLoading(false);
+        if (orders.length === 0) {
+          setOrders([]);
+        }
+      }
+    }, 8000);
+
+    return () => clearTimeout(globalTimeout);
+  }, [loading, orders.length]);
 
   useEffect(() => {
     // Aguardar autenticação antes de buscar dados
@@ -197,8 +220,8 @@ export default function OperatorDashboardPage() {
     );
   }
 
-  // Mostrar loading enquanto busca dados
-  if (loading && orders.length === 0) {
+  // Mostrar loading enquanto busca dados (menos restritivo)
+  if (loading && orders.length === 0 && !error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="animate-spin text-[#5D286C]" size={48} />
