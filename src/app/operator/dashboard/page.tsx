@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -32,65 +32,10 @@ export default function OperatorDashboardPage() {
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitializedRef = useRef(false);
 
-  useEffect(() => {
-    // Aguardar autenticação antes de buscar dados
-    if (authLoading) return;
-    
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    fetchOrders();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let interval: NodeJS.Timeout | null = null;
-
-    try {
-      channel = supabase
-        .channel("operator-orders")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "orders" },
-          (payload) => {
-            const newRecord = payload.new as { status?: string; is_priority?: boolean } | null;
-            const oldRecord = payload.old as { is_priority?: boolean } | null;
-            
-            if (newRecord?.status === "Pendente") {
-              playNotification();
-              fetchOrders();
-            }
-            if (oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
-              playNotification();
-              fetchOrders();
-            }
-          }
-        )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            console.log("Realtime subscribed");
-          } else if (status === "CHANNEL_ERROR") {
-            console.error("Realtime channel error");
-          }
-        });
-
-      interval = setInterval(fetchOrders, 30000);
-    } catch (err) {
-      console.error("Error setting up realtime:", err);
-    }
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [user, authLoading, router]);
-
-  const playNotification = () => {
+  const playNotification = useCallback(() => {
     try {
       const audio = new Audio("/success.mp3");
       audio.play().catch(() => {
@@ -99,10 +44,13 @@ export default function OperatorDashboardPage() {
     } catch {
       // Ignorar erros
     }
-  };
+  }, []);
 
-  async function fetchOrders() {
-    if (!user) return;
+  const fetchOrders = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     
     try {
       setLoading(true);
@@ -153,7 +101,92 @@ export default function OperatorDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  useEffect(() => {
+    // Timeout de segurança: se authLoading ficar true por mais de 10 segundos, forçar loading false
+    if (authLoading) {
+      timeoutRef.current = setTimeout(() => {
+        console.warn("Auth loading timeout - forcing continue");
+        setLoading(false);
+      }, 10000);
+    } else {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [authLoading]);
+
+  useEffect(() => {
+    // Aguardar autenticação antes de buscar dados
+    if (authLoading) return;
+    
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    // Evitar múltiplas inicializações
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    fetchOrders();
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let interval: NodeJS.Timeout | null = null;
+
+    try {
+      channel = supabase
+        .channel("operator-orders")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "orders" },
+          (payload) => {
+            const newRecord = payload.new as { status?: string; is_priority?: boolean } | null;
+            const oldRecord = payload.old as { is_priority?: boolean } | null;
+            
+            if (newRecord?.status === "Pendente") {
+              playNotification();
+              fetchOrders();
+            }
+            if (oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
+              playNotification();
+              fetchOrders();
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            console.log("Realtime subscribed");
+          } else if (status === "CHANNEL_ERROR") {
+            console.error("Realtime channel error");
+          }
+        });
+
+      interval = setInterval(() => {
+        fetchOrders();
+      }, 30000);
+    } catch (err) {
+      console.error("Error setting up realtime:", err);
+    }
+
+    return () => {
+      hasInitializedRef.current = false;
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [user, authLoading, router, fetchOrders, playNotification]);
 
   // Aguardar autenticação
   if (authLoading) {
