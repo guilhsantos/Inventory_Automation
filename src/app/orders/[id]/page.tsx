@@ -25,12 +25,13 @@ export default function OrderDetailsPage() {
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico)), profiles:usuario_id(full_name)"
+        "*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico))"
       )
       .eq("id", orderId)
       .single();
 
     if (error) {
+      console.error("Erro ao carregar pedido:", error);
       setOrder(null);
     } else {
       setOrder(data);
