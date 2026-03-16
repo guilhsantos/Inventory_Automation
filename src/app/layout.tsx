@@ -3,8 +3,11 @@ import { AuthProvider } from "@/lib/auth-context"; //
 import AppShell from "@/components/AppShell";
 
 export const metadata = {
-  title: "SGA Industrial - Reauto Car",
+  title: "Reauto Car",
   description: "Sistema de Gestão de Automação Reauto",
+  icons: {
+    icon: '/logo.ico',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
