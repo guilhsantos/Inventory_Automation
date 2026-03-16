@@ -133,7 +133,7 @@ export default function VisaoGeralPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-4xl font-black text-[#262626] tracking-tight">Visão Geral</h1>
-          <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Operação Reauto Intelligence</p>
+          <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Operação ReautoCar Intelligence</p>
         </div>
         <button 
           onClick={fetchData} 
