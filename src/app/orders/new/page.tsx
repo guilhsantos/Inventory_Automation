@@ -101,7 +101,7 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 p-4">
+    <div className="max-w-3xl mx-auto space-y-8 p-4 overflow-x-hidden">
       <div className="flex items-center gap-4">
         <Link href="/orders" className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm transition-all">
           <ArrowLeft size={20} />
@@ -109,28 +109,29 @@ export default function NewOrderPage() {
         <h1 className="text-3xl font-black text-[#262626]">Novo Pedido</h1>
       </div>
 
-      <form onSubmit={handleSaveOrder} className="space-y-6">
+      <form onSubmit={handleSaveOrder} className="space-y-6 overflow-x-hidden">
         {/* Informações Básicas */}
-        <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 overflow-hidden">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2 min-w-0">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 overflow-hidden w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+            <div className="space-y-2 min-w-0 w-full">
               <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2"><Hash size={14}/> Código do Pedido</label>
               <input 
                 required
                 value={orderData.code}
                 onChange={e => setOrderData({...orderData, code: e.target.value.toUpperCase()})}
-                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base box-border" 
                 placeholder="EX: ORD-2024-001"
               />
             </div>
-            <div className="space-y-2 min-w-0">
+            <div className="space-y-2 min-w-0 w-full overflow-hidden">
               <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2"><Calendar size={14}/> Data de Entrega</label>
               <input 
                 required
                 type="date"
                 value={orderData.deliveryDate}
                 onChange={e => setOrderData({...orderData, deliveryDate: e.target.value})}
-                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base box-border max-w-full" 
+                style={{ width: '100%', maxWidth: '100%' }}
               />
             </div>
           </div>
