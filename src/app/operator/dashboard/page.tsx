@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle, Package, Clock, Volume2, TrendingUp, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { formatDate } from "@/lib/date-utils";
 
 type OperatorOrder = {
   id: number;
@@ -397,7 +398,7 @@ export default function OperatorDashboardPage() {
                     <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-1">Entrega</p>
                     <p className="text-lg font-bold">
                       {currentOrder.data_entrega
-                        ? new Date(currentOrder.data_entrega).toLocaleDateString('pt-BR')
+                        ? formatDate(currentOrder.data_entrega)
                         : "Sem data"}
                     </p>
                   </div>

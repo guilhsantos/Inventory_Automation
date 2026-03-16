@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from "lucide-react";
 import Link from "next/link";
+import { formatDate } from "@/lib/date-utils";
 
 export default function OrderDetailsPage() {
   const params = useParams();
@@ -102,7 +103,7 @@ export default function OrderDetailsPage() {
             <p className="flex items-center gap-2 text-sm font-bold text-gray-500">
               <Calendar size={16} className="text-gray-400" />{" "}
               {order.data_entrega
-                ? new Date(order.data_entrega).toLocaleDateString()
+                ? formatDate(order.data_entrega)
                 : "Sem data definida"}
             </p>
             {order.invoice_number && (

@@ -128,6 +128,7 @@ export default function NewOrderPage() {
               <input 
                 required
                 type="date"
+                lang="pt-BR"
                 value={orderData.deliveryDate}
                 onChange={e => setOrderData({...orderData, deliveryDate: e.target.value})}
                 className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base box-border max-w-full" 

@@ -171,6 +171,7 @@ export default function PerformancePage() {
                 <label className="text-xs font-black text-gray-400 uppercase">Data Inicial</label>
                 <input
                   type="date"
+                  lang="pt-BR"
                   value={startDate}
                   onChange={(e) => {
                     if (e.target.value <= endDate) {
@@ -186,6 +187,7 @@ export default function PerformancePage() {
                 <label className="text-xs font-black text-gray-400 uppercase">Data Final</label>
                 <input
                   type="date"
+                  lang="pt-BR"
                   value={endDate}
                   onChange={(e) => {
                     if (e.target.value >= startDate) {

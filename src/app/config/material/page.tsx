@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Plus, Database, Save, Calendar, Package } from "lucide-react";
+import { Loader2, Plus, Database, Save, Calendar, Package, Edit, Trash2, X, Check, AlertTriangle } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
 
 export default function MaterialConfigPage() {
@@ -13,6 +13,17 @@ export default function MaterialConfigPage() {
   
   // Estados para Novo Material
   const [newMatName, setNewMatName] = useState("");
+  
+  // Estados para Edição
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState("");
+  
+  // Estados para Deletar
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; materialId: number | null; materialName: string }>({
+    isOpen: false,
+    materialId: null,
+    materialName: ""
+  });
   
   // Estados para Entrada de Estoque
   const [selectedMatId, setSelectedMatId] = useState("");
@@ -41,6 +52,68 @@ export default function MaterialConfigPage() {
       fetchMaterials();
     } else {
       showToast("Erro ao cadastrar material", "error");
+    }
+  };
+
+  const handleStartEdit = (material: any) => {
+    setEditingId(material.id);
+    setEditingName(material.nome);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingName("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editingName.trim()) return;
+
+    const { error } = await supabase
+      .from("materials")
+      .update({ nome: editingName.trim() })
+      .eq("id", editingId);
+
+    if (!error) {
+      showToast("Material atualizado com sucesso!");
+      setEditingId(null);
+      setEditingName("");
+      fetchMaterials();
+    } else {
+      showToast("Erro ao atualizar material", "error");
+    }
+  };
+
+  const handleDeleteClick = (material: any) => {
+    setDeleteModal({
+      isOpen: true,
+      materialId: material.id,
+      materialName: material.nome
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.materialId) return;
+
+    // Verificar se o material tem estoque ou entradas registradas
+    const material = materials.find(m => m.id === deleteModal.materialId);
+    if (material && parseFloat(material.estoque_kg || 0) > 0) {
+      showToast("Não é possível deletar material com estoque. Zere o estoque primeiro.", "error");
+      setDeleteModal({ isOpen: false, materialId: null, materialName: "" });
+      return;
+    }
+
+    const { error } = await supabase
+      .from("materials")
+      .delete()
+      .eq("id", deleteModal.materialId);
+
+    if (!error) {
+      showToast("Material deletado com sucesso!");
+      setDeleteModal({ isOpen: false, materialId: null, materialName: "" });
+      fetchMaterials();
+    } else {
+      showToast("Erro ao deletar material", "error");
+      setDeleteModal({ isOpen: false, materialId: null, materialName: "" });
     }
   };
 
@@ -145,6 +218,7 @@ export default function MaterialConfigPage() {
                 <input 
                   required
                   type="date" 
+                  lang="pt-BR"
                   value={arrivalDate} 
                   onChange={e => setArrivalDate(e.target.value)} 
                   className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base box-border max-w-full" 
@@ -204,13 +278,95 @@ export default function MaterialConfigPage() {
             <div className="space-y-3">
               {materials.map(m => (
                 <div key={m.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="font-black text-[#262626]">{m.nome}</p>
-                  <p className="text-sm font-bold text-gray-400 mt-1">{parseFloat(m.estoque_kg || 0).toFixed(2)} KG em estoque</p>
+                  {editingId === m.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={e => setEditingName(e.target.value)}
+                        className="flex-1 p-2 bg-gray-50 rounded-xl font-bold outline-none border-2 border-[#5D286C] text-sm"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleSaveEdit}
+                        className="p-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+                        title="Salvar"
+                      >
+                        <Check size={18} />
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="p-2 bg-gray-400 text-white rounded-xl hover:bg-gray-500 transition-colors"
+                        title="Cancelar"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-[#262626]">{m.nome}</p>
+                        <p className="text-sm font-bold text-gray-400 mt-1">{parseFloat(m.estoque_kg || 0).toFixed(2)} KG em estoque</p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3">
+                        <button
+                          onClick={() => handleStartEdit(m)}
+                          className="p-2 text-[#5D286C] hover:bg-purple-50 rounded-xl transition-colors"
+                          title="Editar"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(m)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                          title="Deletar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {materials.length === 0 && (
                 <p className="text-center text-gray-400 font-bold py-10">Nenhum tipo de material cadastrado.</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-red-100 rounded-2xl">
+                <AlertTriangle className="text-red-600" size={24} />
+              </div>
+              <h3 className="text-xl font-black text-[#262626]">Confirmar Exclusão</h3>
+            </div>
+            <p className="text-gray-700 mb-6">
+              Tem certeza que deseja deletar o material <strong>{deleteModal.materialName}</strong>?
+              {materials.find(m => m.id === deleteModal.materialId) && parseFloat(materials.find(m => m.id === deleteModal.materialId)?.estoque_kg || 0) > 0 && (
+                <span className="block mt-2 text-red-600 text-sm font-bold">
+                  ⚠️ Este material possui estoque. A exclusão não será permitida.
+                </span>
+              )}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, materialId: null, materialName: "" })}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-2xl font-black hover:bg-gray-200 transition-colors"
+              >
+                CANCELAR
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-2xl font-black hover:bg-red-600 transition-colors"
+              >
+                DELETAR
+              </button>
             </div>
           </div>
         </div>

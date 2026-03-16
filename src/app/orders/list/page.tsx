@@ -6,6 +6,7 @@ import { useToast } from "@/lib/toast-context";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye, FileText, Trash2, AlertTriangle } from "lucide-react";
+import { formatDate } from "@/lib/date-utils";
 
 export default function OrdersListPage() {
   const { user } = useAuth();
@@ -299,7 +300,7 @@ export default function OrdersListPage() {
               </div>
               <p className="font-bold text-gray-700">{order.cliente}</p>
               <div className="flex items-center gap-4 text-xs text-gray-400 font-bold uppercase mt-2">
-                <span className="flex items-center gap-1"><Clock size={14}/> Entrega: {new Date(order.data_entrega).toLocaleDateString()}</span>
+                <span className="flex items-center gap-1"><Clock size={14}/> Entrega: {formatDate(order.data_entrega)}</span>
                 <span className="flex items-center gap-1"><Package size={14}/> {order.order_items?.length || 0} Tipos de Kits</span>
               </div>
             </div>
