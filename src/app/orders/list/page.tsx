@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
-import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye, FileText } from "lucide-react";
+import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye, FileText, Trash2, AlertTriangle } from "lucide-react";
 
 export default function OrdersListPage() {
   const { user } = useAuth();
@@ -17,6 +17,7 @@ export default function OrdersListPage() {
   const [priorityModal, setPriorityModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [backToPendingModal, setBackToPendingModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string }>({ isOpen: false, order: null, invoice: "" });
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
 
   useEffect(() => {
     fetchOrders();
@@ -191,6 +192,40 @@ export default function OrdersListPage() {
     }
   };
 
+  const handleDeleteOrder = async (order: any) => {
+    if (order.status !== "Pendente") return;
+    setDeleteModal({ isOpen: true, order });
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!deleteModal.order) return;
+    const order = deleteModal.order;
+
+    try {
+      // Deletar order_items primeiro (devido à foreign key)
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .delete()
+        .eq("order_id", order.id);
+
+      if (itemsError) throw itemsError;
+
+      // Deletar o pedido
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      showToast("Pedido excluído com sucesso!");
+      setDeleteModal({ isOpen: false, order: null });
+      await fetchOrders();
+    } catch (err: any) {
+      showToast(err.message || "Erro ao excluir pedido", "error");
+    }
+  };
+
   const filteredOrders = orders.filter((o: any) => {
     const term = searchTerm.toLowerCase();
     return (
@@ -303,6 +338,13 @@ export default function OrdersListPage() {
                     >
                       <Edit size={16} /> Editar Pedido
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteOrder(order)}
+                      className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-red-700 transition-all"
+                    >
+                      <Trash2 size={16} /> Excluir Pedido
+                    </button>
                   </>
                 )}
 
@@ -473,6 +515,42 @@ export default function OrdersListPage() {
                   Cancelar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Excluir Pedido */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-6 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setDeleteModal({ isOpen: false, order: null })} 
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-xl font-black text-[#262626] mb-3 flex items-center gap-2">
+              <AlertTriangle className="text-red-600" size={20} /> Confirmar Exclusão
+            </h2>
+            <p className="text-sm text-gray-600 font-bold mb-4">
+              Tem certeza que deseja excluir o pedido <span className="text-[#5D286C] font-black">{deleteModal.order?.codigo_unico}</span>?
+              <br /><br />
+              Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleConfirmDeleteOrder}
+                className="w-full bg-red-600 text-white p-3 rounded-2xl font-black text-sm shadow-lg hover:bg-red-700 transition-all"
+              >
+                Confirmar Exclusão
+              </button>
+              <button
+                onClick={() => setDeleteModal({ isOpen: false, order: null })}
+                className="w-full bg-gray-100 text-gray-600 p-3 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
