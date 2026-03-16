@@ -103,6 +103,10 @@ export default function OperatorDashboardPage() {
       setLoading(true);
       setError(null);
       
+      // Guardar quantidade anterior de pedidos
+      const previousOrderCount = orders.length;
+      const previousOrderIds = new Set(orders.map(o => o.id));
+      
       const queryPromise = supabase
         .from("orders")
         .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
@@ -140,6 +144,16 @@ export default function OperatorDashboardPage() {
           return { ...order, stockPercentage };
         });
         
+        // Verificar se há novos pedidos
+        const newOrderIds = new Set(ordersWithStock.map((o: any) => o.id as number));
+        const hasNewOrders = ordersWithStock.length > previousOrderCount || 
+          Array.from(newOrderIds).some((id: unknown) => !previousOrderIds.has(id as number));
+        
+        if (hasNewOrders && previousOrderCount > 0) {
+          console.log("Novo pedido detectado via comparação de lista");
+          playNotification();
+        }
+        
         setOrders(ordersWithStock as OperatorOrder[]);
       } else {
         setOrders([]);
@@ -151,7 +165,7 @@ export default function OperatorDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, orders, playNotification]);
 
   useEffect(() => {
     console.log("AuthLoading changed:", authLoading);
