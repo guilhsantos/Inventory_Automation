@@ -111,7 +111,7 @@ export default function MaterialConfigPage() {
       {activeTab === 'entry' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 animate-in fade-in duration-500">
           {/* Formulário de Entrada */}
-          <form onSubmit={handleSaveEntry} className="bg-white p-4 md:p-8 rounded-xl md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit">
+          <form onSubmit={handleSaveEntry} className="bg-white p-4 md:p-8 rounded-xl md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit overflow-hidden">
             <h2 className="text-xl md:text-2xl font-black flex items-center gap-3"><Plus className="text-[#5D286C]" /> Entrada de Material</h2>
             
             <div className="space-y-2">
@@ -128,7 +128,7 @@ export default function MaterialConfigPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-xs font-black text-gray-400 uppercase ml-2">Quantidade (KG)</label>
                 <input 
                   required
@@ -136,18 +136,18 @@ export default function MaterialConfigPage() {
                   step="0.01"
                   value={addQty} 
                   onChange={e => setAddQty(e.target.value)} 
-                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
+                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
                   placeholder="0.00" 
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-xs font-black text-gray-400 uppercase ml-2">Data de Chegada</label>
                 <input 
                   required
                   type="date" 
                   value={arrivalDate} 
                   onChange={e => setArrivalDate(e.target.value)} 
-                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
+                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
                 />
               </div>
             </div>

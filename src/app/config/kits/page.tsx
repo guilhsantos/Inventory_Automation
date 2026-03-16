@@ -202,12 +202,21 @@ export default function KitsConfigPage() {
             
             <div className="border-t border-gray-50 pt-4 space-y-3">
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-widest">Composição do Kit</label>
-              <div className="flex gap-2">
-                <select value={currentMoldeSelection} onChange={e => setCurrentMoldeSelection(e.target.value)} className="flex-1 p-3.5 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none text-xs md:text-sm border-2 border-transparent focus:border-[#5D286C] appearance-none">
+              <div className="flex flex-col sm:flex-row gap-2 min-w-0">
+                <select 
+                  value={currentMoldeSelection} 
+                  onChange={e => setCurrentMoldeSelection(e.target.value)} 
+                  className="flex-1 p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none text-xs md:text-sm border-2 border-transparent focus:border-[#5D286C] appearance-none min-w-0 max-w-full"
+                >
                   <option value="">Selecione a Peça...</option>
                   {moldes.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
                 </select>
-                <button onClick={handleAddMoldeToKit} className="bg-[#5D286C] text-white p-3.5 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0"><Plus size={24}/></button>
+                <button 
+                  onClick={handleAddMoldeToKit} 
+                  className="bg-[#5D286C] text-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0 flex items-center justify-center"
+                >
+                  <Plus size={20} className="md:hidden"/><Plus size={24} className="hidden md:block"/>
+                </button>
               </div>
 
               <div className="space-y-2 mt-2">

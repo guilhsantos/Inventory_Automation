@@ -111,26 +111,26 @@ export default function NewOrderPage() {
 
       <form onSubmit={handleSaveOrder} className="space-y-6">
         {/* Informações Básicas */}
-        <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2"><Hash size={14}/> Código do Pedido</label>
               <input 
                 required
                 value={orderData.code}
                 onChange={e => setOrderData({...orderData, code: e.target.value.toUpperCase()})}
-                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
                 placeholder="EX: ORD-2024-001"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2"><Calendar size={14}/> Data de Entrega</label>
               <input 
                 required
                 type="date"
                 value={orderData.deliveryDate}
                 onChange={e => setOrderData({...orderData, deliveryDate: e.target.value})}
-                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base max-w-full" 
               />
             </div>
           </div>
@@ -170,7 +170,7 @@ export default function NewOrderPage() {
         </div>
 
         {/* Seleção de Kits */}
-        <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
+        <div className="bg-white p-4 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 overflow-hidden">
           <h2 className="text-lg md:text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus /> Adicionar Kits ao Pedido</h2>
           
           <div className="flex flex-col sm:flex-row gap-2">
