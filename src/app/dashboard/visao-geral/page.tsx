@@ -38,7 +38,8 @@ export default function VisaoGeralPage() {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function fetchData() {
     setLoading(true);
@@ -50,7 +51,7 @@ export default function VisaoGeralPage() {
         supabase.from("orders").select("id").eq("status", "Entregue"),
         supabase.from("orders").select("id").eq("status", "Concluído"),
         supabase.from("orders").select(`
-          id, cliente, data_entrega,
+          id, cliente, data_entrega, is_priority, priority_position,
           order_items (kit_id, quantidade, kits (nome_kit, estoque_atual))
         `).eq("status", "Pendente")
       ]);
@@ -101,7 +102,21 @@ export default function VisaoGeralPage() {
         });
         const coverage = totalItems > 0 ? (availableItems / totalItems) * 100 : 100;
         return { ...order, coverage };
-      }).sort((a: any, b: any) => a.coverage - b.coverage) || [];
+      }).sort((a: any, b: any) => {
+        // 1) Prioritário vem antes de não prioritário
+        if (a.is_priority && !b.is_priority) return -1;
+        if (!a.is_priority && b.is_priority) return 1;
+
+        // 2) Entre prioritários, ordenar pela posição (1, 2, 3...)
+        if (a.is_priority && b.is_priority) {
+          const posA = a.priority_position ?? 9999;
+          const posB = b.priority_position ?? 9999;
+          if (posA !== posB) return posA - posB;
+        }
+
+        // 3) Se empatar, ordenar pelo % de cobertura (mais crítico primeiro)
+        return a.coverage - b.coverage;
+      }) || [];
 
       setStats({
         totalOrders: allOrdersRes.data?.length || 0,
@@ -155,40 +170,40 @@ export default function VisaoGeralPage() {
       <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <h2 className="text-xl font-black text-[#262626]">Gráfico de Pedidos</h2>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar size={16} className="text-gray-400" />
-              <label className="text-xs font-black text-gray-400 uppercase">Data Inicial</label>
-              <input
-                type="date"
-                lang="pt-BR"
-                value={startDate}
-                onChange={(e) => {
-                  if (e.target.value <= endDate) {
-                    setStartDate(e.target.value);
-                  }
-                }}
-                max={endDate}
-                className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
-              />
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-gray-400" />
+                <label className="text-xs font-black text-gray-400 uppercase">Data Inicial</label>
+                <input
+                  type="date"
+                  lang="pt-BR"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  max={endDate}
+                  className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-gray-400" />
+                <label className="text-xs font-black text-gray-400 uppercase">Data Final</label>
+                <input
+                  type="date"
+                  lang="pt-BR"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  max={today.toISOString().split('T')[0]}
+                  className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar size={16} className="text-gray-400" />
-              <label className="text-xs font-black text-gray-400 uppercase">Data Final</label>
-              <input
-                type="date"
-                lang="pt-BR"
-                value={endDate}
-                onChange={(e) => {
-                  if (e.target.value >= startDate) {
-                    setEndDate(e.target.value);
-                  }
-                }}
-                min={startDate}
-                max={today.toISOString().split('T')[0]}
-                className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
-              />
-            </div>
+            <button
+              onClick={fetchData}
+              className="px-4 py-2 bg-[#5D286C] text-white rounded-2xl text-xs font-black hover:bg-[#7B1470] transition-colors"
+            >
+              FILTRAR
+            </button>
           </div>
         </div>
         <div className="h-[400px] w-full">

@@ -39,7 +39,8 @@ export default function PerformancePage() {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, typeFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function fetchData() {
     setLoading(true);
@@ -165,7 +166,7 @@ export default function PerformancePage() {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Período</label>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 items-center">
               <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-gray-400" />
                 <label className="text-xs font-black text-gray-400 uppercase">Data Inicial</label>
@@ -173,11 +174,7 @@ export default function PerformancePage() {
                   type="date"
                   lang="pt-BR"
                   value={startDate}
-                  onChange={(e) => {
-                    if (e.target.value <= endDate) {
-                      setStartDate(e.target.value);
-                    }
-                  }}
+                  onChange={(e) => setStartDate(e.target.value)}
                   max={endDate}
                   className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm flex-1"
                 />
@@ -189,16 +186,18 @@ export default function PerformancePage() {
                   type="date"
                   lang="pt-BR"
                   value={endDate}
-                  onChange={(e) => {
-                    if (e.target.value >= startDate) {
-                      setEndDate(e.target.value);
-                    }
-                  }}
+                  onChange={(e) => setEndDate(e.target.value)}
                   min={startDate}
                   max={today.toISOString().split('T')[0]}
                   className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm flex-1"
                 />
               </div>
+              <button
+                onClick={fetchData}
+                className="px-4 py-2 bg-[#5D286C] text-white rounded-2xl text-xs font-black hover:bg-[#7B1470] transition-colors"
+              >
+                FILTRAR
+              </button>
             </div>
           </div>
           <div className="flex-1">
