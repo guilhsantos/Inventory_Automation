@@ -111,7 +111,7 @@ export default function NewOrderPage() {
 
       <form onSubmit={handleSaveOrder} className="space-y-6">
         {/* Informações Básicas */}
-        <div className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
+        <div className="bg-white p-4 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2"><Hash size={14}/> Código do Pedido</label>
@@ -119,7 +119,7 @@ export default function NewOrderPage() {
                 required
                 value={orderData.code}
                 onChange={e => setOrderData({...orderData, code: e.target.value.toUpperCase()})}
-                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
                 placeholder="EX: ORD-2024-001"
               />
             </div>
@@ -130,7 +130,7 @@ export default function NewOrderPage() {
                 type="date"
                 value={orderData.deliveryDate}
                 onChange={e => setOrderData({...orderData, deliveryDate: e.target.value})}
-                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
               />
             </div>
           </div>
@@ -140,7 +140,7 @@ export default function NewOrderPage() {
               required
               value={orderData.client}
               onChange={e => setOrderData({...orderData, client: e.target.value})}
-              className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+              className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
               placeholder="Nome completo ou Razão Social"
             />
           </div>
@@ -151,7 +151,7 @@ export default function NewOrderPage() {
             <textarea 
               value={orderData.notes}
               onChange={e => setOrderData({...orderData, notes: e.target.value})}
-              className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] min-h-[100px]" 
+              className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] min-h-[100px] text-sm md:text-base" 
               placeholder="Observações adicionais sobre o pedido..."
             />
           </div>
@@ -173,11 +173,11 @@ export default function NewOrderPage() {
         <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
           <h2 className="text-lg md:text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus /> Adicionar Kits ao Pedido</h2>
           
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select 
               value={currentKitSelection} 
               onChange={e => setCurrentKitSelection(e.target.value)} 
-              className="flex-1 p-3.5 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm appearance-none"
+              className="flex-1 p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base appearance-none"
             >
               <option value="">Selecione um Kit...</option>
               {availableKits.map(k => (
@@ -187,9 +187,9 @@ export default function NewOrderPage() {
             <button 
               type="button"
               onClick={handleAddKit} 
-              className="bg-[#5D286C] text-white p-3.5 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0"
+              className="bg-[#5D286C] text-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0 flex items-center justify-center"
             >
-              <Plus size={24}/>
+              <Plus size={20} className="md:hidden"/><Plus size={24} className="hidden md:block"/>
             </button>
           </div>
 

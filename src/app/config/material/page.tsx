@@ -109,10 +109,10 @@ export default function MaterialConfigPage() {
       </div>
 
       {activeTab === 'entry' ? (
-        <div className="grid md:grid-cols-2 gap-10 animate-in fade-in duration-500">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 animate-in fade-in duration-500">
           {/* Formulário de Entrada */}
-          <form onSubmit={handleSaveEntry} className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit">
-            <h2 className="text-2xl font-black flex items-center gap-3"><Plus className="text-[#5D286C]" /> Entrada de Material</h2>
+          <form onSubmit={handleSaveEntry} className="bg-white p-4 md:p-8 rounded-xl md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-6 h-fit">
+            <h2 className="text-xl md:text-2xl font-black flex items-center gap-3"><Plus className="text-[#5D286C]" /> Entrada de Material</h2>
             
             <div className="space-y-2">
               <label className="text-xs font-black text-gray-400 uppercase ml-2">Material</label>
@@ -120,14 +120,14 @@ export default function MaterialConfigPage() {
                 required
                 value={selectedMatId} 
                 onChange={e => setSelectedMatId(e.target.value)}
-                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] appearance-none"
+                className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] appearance-none text-sm md:text-base"
               >
                 <option value="">Selecione o material...</option>
                 {materials.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-black text-gray-400 uppercase ml-2">Quantidade (KG)</label>
                 <input 
@@ -136,7 +136,7 @@ export default function MaterialConfigPage() {
                   step="0.01"
                   value={addQty} 
                   onChange={e => setAddQty(e.target.value)} 
-                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
                   placeholder="0.00" 
                 />
               </div>
@@ -147,7 +147,7 @@ export default function MaterialConfigPage() {
                   type="date" 
                   value={arrivalDate} 
                   onChange={e => setArrivalDate(e.target.value)} 
-                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C]" 
+                  className="w-full p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base" 
                 />
               </div>
             </div>

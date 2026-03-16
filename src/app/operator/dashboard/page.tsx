@@ -362,26 +362,26 @@ export default function OperatorDashboardPage() {
 
         {/* Pedido Atual (Grande) */}
         {currentOrder && (
-          <div className={`relative p-8 md:p-10 rounded-[3rem] border-2 ${
+          <div className={`relative p-4 md:p-8 lg:p-10 rounded-2xl md:rounded-[3rem] border-2 ${
             currentOrder.is_priority 
               ? "border-red-400 bg-gradient-to-br from-red-950/60 to-red-900/40" 
               : "border-white/20 bg-white/5"
-          } shadow-2xl`}>
+          } shadow-2xl overflow-hidden`}>
             {currentOrder.is_priority && (
-              <div className="absolute -top-4 left-8 flex items-center gap-1 text-xs font-black uppercase text-red-200">
-                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-600 text-white shadow-lg">
-                  <Volume2 size={14} /> PEDIDO PRIORITÁRIO
+              <div className="absolute -top-2 md:-top-4 left-4 md:left-8 flex items-center gap-1 text-xs font-black uppercase text-red-200">
+                <span className="inline-flex items-center gap-2 px-2 md:px-4 py-1 md:py-2 rounded-full bg-red-600 text-white shadow-lg text-[10px] md:text-xs">
+                  <Volume2 size={12} className="md:w-auto md:h-auto w-3 h-3" /> PEDIDO PRIORITÁRIO
                 </span>
               </div>
             )}
             
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mt-4 md:mt-0">
               {/* Informações Principais */}
-              <div className="space-y-6">
+              <div className="space-y-4 md:space-y-6">
                 <div>
                   <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-2">Pedido</p>
                   <Link href={`/orders/${currentOrder.id}`}>
-                    <h2 className="text-4xl md:text-5xl font-black hover:underline">
+                    <h2 className="text-2xl md:text-4xl lg:text-5xl font-black hover:underline break-words">
                       {currentOrder.codigo_unico}
                     </h2>
                   </Link>
@@ -389,7 +389,7 @@ export default function OperatorDashboardPage() {
                 
                 <div>
                   <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-2">Cliente</p>
-                  <p className="text-2xl font-black">{currentOrder.cliente}</p>
+                  <p className="text-lg md:text-2xl font-black break-words">{currentOrder.cliente}</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -432,7 +432,7 @@ export default function OperatorDashboardPage() {
               {/* Detalhes dos Kits */}
               <div>
                 <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-4">Kits do Pedido</p>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2">
                   {currentOrder.order_items && currentOrder.order_items.length > 0 ? (
                     currentOrder.order_items.map((item, idx) => (
                       <div 

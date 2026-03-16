@@ -131,7 +131,7 @@ export default function KitsConfigPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 p-2 md:p-4">
+    <div className="max-w-5xl mx-auto space-y-6 p-2 md:p-4 overflow-x-hidden">
       {/* Abas */}
       <div className="inline-flex gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase">
         <button 
@@ -157,8 +157,8 @@ export default function KitsConfigPage() {
       </div>
 
       {activeTab === 'moldes' ? (
-        <div className="grid md:grid-cols-2 gap-6 md:gap-10 animate-in fade-in duration-500">
-          <form onSubmit={handleSaveMolde} className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-5 h-fit">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 lg:gap-10 animate-in fade-in duration-500">
+          <form onSubmit={handleSaveMolde} className="bg-white p-4 md:p-5 lg:p-8 rounded-xl md:rounded-[1.5rem] lg:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-5 h-fit">
             <div className="flex justify-between items-center">
               <h2 className="text-xl md:text-2xl font-black flex items-center gap-2">
                 {editingMoldeId ? <><Edit2 className="text-blue-500" size={20} /> Editar</> : <><Plus className="text-[#5D286C]" size={20} /> Novo Molde</>}
@@ -175,8 +175,8 @@ export default function KitsConfigPage() {
             <h2 className="text-lg md:text-xl font-black flex items-center gap-2 px-2 text-[#262626]"><Hammer className="text-[#5D286C]" size={20} /> Moldes Ativos</h2>
             <div className="space-y-3">
               {moldes.map(m => (
-                <div key={m.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm group">
-                  <p className="font-black text-sm md:text-base text-[#262626]">{m.nome}</p>
+                <div key={m.id} className="bg-white p-3 md:p-4 rounded-xl md:rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm group">
+                  <p className="font-black text-sm md:text-base text-[#262626] break-words flex-1 mr-2">{m.nome}</p>
                   <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-all">
                     <button onClick={() => { setEditingMoldeId(m.id); setNomeMolde(m.nome); }} className="p-2 text-blue-400 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={18} /></button>
                     <button onClick={() => setConfirmDelete({ isOpen: true, type: 'molde', id: m.id })} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
@@ -187,8 +187,8 @@ export default function KitsConfigPage() {
           </div>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 gap-6 md:gap-8 animate-in fade-in duration-500">
-          <div className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 h-fit">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 lg:gap-8 animate-in fade-in duration-500">
+          <div className="bg-white p-4 md:p-5 lg:p-8 rounded-xl md:rounded-[1.5rem] lg:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 h-fit">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-black flex items-center gap-2">
                 {editingKitId ? <Edit2 className="text-blue-500" size={20}/> : <Plus className="text-[#5D286C]" size={20} />} 
@@ -235,11 +235,11 @@ export default function KitsConfigPage() {
             <h2 className="text-lg md:text-xl font-black flex items-center gap-2 px-2 text-[#262626]"><Package className="text-[#5D286C]" size={20}/> Kits Ativos</h2>
             <div className="space-y-3">
               {kits.map(k => (
-                <div key={k.id} className="bg-white p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-gray-100 shadow-sm group">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                        <p className="font-black text-[#5D286C] text-xs md:text-sm tracking-tight">{k.codigo_unico}</p>
-                        <p className="font-bold text-[#262626] text-sm md:text-base leading-tight mt-0.5">{k.nome_kit}</p>
+                <div key={k.id} className="bg-white p-3 md:p-4 lg:p-5 rounded-xl md:rounded-2xl lg:rounded-[2rem] border border-gray-100 shadow-sm group">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                        <p className="font-black text-[#5D286C] text-xs md:text-sm tracking-tight break-words">{k.codigo_unico}</p>
+                        <p className="font-bold text-[#262626] text-sm md:text-base leading-tight mt-0.5 break-words">{k.nome_kit}</p>
                     </div>
                     <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-all shrink-0">
                         <button onClick={() => { 
