@@ -226,14 +226,28 @@ export default function OperatorDashboardPage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "orders" },
           (payload) => {
-            const newRecord = payload.new as { status?: string; is_priority?: boolean } | null;
-            const oldRecord = payload.old as { is_priority?: boolean } | null;
+            console.log("Realtime event received:", payload.eventType, payload);
             
-            if (newRecord?.status === "Pendente") {
+            const newRecord = payload.new as { status?: string; is_priority?: boolean; id?: number } | null;
+            const oldRecord = payload.old as { status?: string; is_priority?: boolean } | null;
+            
+            // Detectar novo pedido (INSERT com status Pendente)
+            if (payload.eventType === "INSERT" && newRecord?.status === "Pendente") {
+              console.log("Novo pedido detectado (INSERT):", newRecord.id);
               playNotification();
               fetchOrders();
             }
-            if (oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
+            
+            // Detectar pedido que foi atualizado para Pendente
+            if (payload.eventType === "UPDATE" && newRecord?.status === "Pendente" && oldRecord?.status !== "Pendente") {
+              console.log("Pedido atualizado para Pendente (UPDATE):", newRecord.id);
+              playNotification();
+              fetchOrders();
+            }
+            
+            // Detectar mudança de prioridade
+            if (payload.eventType === "UPDATE" && oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
+              console.log("Prioridade alterada (UPDATE):", newRecord.id);
               playNotification();
               fetchOrders();
             }
@@ -244,6 +258,8 @@ export default function OperatorDashboardPage() {
             console.log("Realtime subscribed");
           } else if (status === "CHANNEL_ERROR") {
             console.error("Realtime channel error");
+          } else {
+            console.log("Realtime status:", status);
           }
         });
 
