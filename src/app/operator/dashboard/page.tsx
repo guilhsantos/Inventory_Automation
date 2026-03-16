@@ -45,17 +45,43 @@ export default function OperatorDashboardPage() {
   useEffect(() => {
     audioNotification.current = new Audio('/success.mp3');
     // Pré-carregar o áudio
+    audioNotification.current.preload = 'auto';
     audioNotification.current.load();
+    
+    // Log para debug
+    audioNotification.current.addEventListener('loadeddata', () => {
+      console.log('Áudio carregado com sucesso');
+    });
+    
+    audioNotification.current.addEventListener('error', (e) => {
+      console.error('Erro ao carregar áudio:', e);
+    });
   }, []);
 
   const playNotification = useCallback(() => {
     try {
       if (audioNotification.current) {
+        console.log('Tentando tocar notificação...');
         // Resetar para o início e tocar
         audioNotification.current.currentTime = 0;
-        audioNotification.current.play().catch((err) => {
-          console.error("Erro ao tocar notificação:", err);
-        });
+        audioNotification.current.play()
+          .then(() => {
+            console.log('Notificação tocada com sucesso');
+          })
+          .catch((err) => {
+            console.error("Erro ao tocar notificação:", err);
+            // Tentar criar uma nova instância se falhar
+            try {
+              const newAudio = new Audio('/success.mp3');
+              newAudio.play().catch((e) => {
+                console.error("Erro ao tocar nova instância:", e);
+              });
+            } catch (e) {
+              console.error("Erro ao criar nova instância de áudio:", e);
+            }
+          });
+      } else {
+        console.warn('audioNotification.current é null');
       }
     } catch (err) {
       console.error("Erro ao criar áudio:", err);
