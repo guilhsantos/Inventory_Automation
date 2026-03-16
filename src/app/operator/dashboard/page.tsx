@@ -35,6 +35,7 @@ export default function OperatorDashboardPage() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
   const audioNotification = useRef<HTMLAudioElement | null>(null);
+  const previousOrdersRef = useRef<Set<number>>(new Set()); // Novo ref para guardar IDs anteriores
 
   // Log para debug
   useEffect(() => {
@@ -43,7 +44,7 @@ export default function OperatorDashboardPage() {
 
   // Inicializar áudio uma vez
   useEffect(() => {
-    audioNotification.current = new Audio('/success.mp3');
+    audioNotification.current = new Audio('/new_order.mp3');
     // Pré-carregar o áudio
     audioNotification.current.preload = 'auto';
     audioNotification.current.load();
@@ -103,9 +104,8 @@ export default function OperatorDashboardPage() {
       setLoading(true);
       setError(null);
       
-      // Guardar quantidade anterior de pedidos
-      const previousOrderCount = orders.length;
-      const previousOrderIds = new Set(orders.map(o => o.id));
+      // Guardar IDs anteriores do ref (não causa re-render)
+      const previousOrderIds = previousOrdersRef.current;
       
       const queryPromise = supabase
         .from("orders")
@@ -144,18 +144,22 @@ export default function OperatorDashboardPage() {
           return { ...order, stockPercentage };
         });
         
-        // Verificar se há novos pedidos
-        const newOrderIds = new Set(ordersWithStock.map((o: any) => o.id as number));
-        const hasNewOrders = ordersWithStock.length > previousOrderCount || 
-          Array.from(newOrderIds).some((id: unknown) => !previousOrderIds.has(id as number));
+        // Verificar se há novos pedidos comparando com o ref
+        const newOrderIds = new Set<number>(ordersWithStock.map((o: any) => o.id as number));
+        const hasNewOrders = previousOrderIds.size > 0 && 
+          Array.from(newOrderIds).some((id: number) => !previousOrderIds.has(id));
         
-        if (hasNewOrders && previousOrderCount > 0) {
+        if (hasNewOrders) {
           console.log("Novo pedido detectado via comparação de lista");
           playNotification();
         }
         
+        // Atualizar o ref com os novos IDs
+        previousOrdersRef.current = newOrderIds;
+        
         setOrders(ordersWithStock as OperatorOrder[]);
       } else {
+        previousOrdersRef.current = new Set();
         setOrders([]);
       }
     } catch (err: any) {
@@ -165,7 +169,7 @@ export default function OperatorDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, orders, playNotification]);
+  }, [user, playNotification]);
 
   useEffect(() => {
     console.log("AuthLoading changed:", authLoading);
