@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Loader2, ArrowLeft, Package, User, Calendar, Star } from "lucide-react";
+import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from "lucide-react";
 import Link from "next/link";
 
 export default function OrderDetailsPage() {
@@ -13,6 +13,7 @@ export default function OrderDetailsPage() {
 
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   useEffect(() => {
     if (!orderId) return;
@@ -152,12 +153,18 @@ export default function OrderDetailsPage() {
               Foto do Pedido
             </h2>
             {hasPhoto ? (
-              <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
+              <div 
+                className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 group cursor-pointer" 
+                onClick={() => setIsPhotoModalOpen(true)}
+              >
                 <img
                   src={order.photo_url}
                   alt={`Foto do pedido ${order.codigo_unico}`}
-                  className="w-full h-64 object-cover"
+                  className="w-full h-64 object-cover transition-transform group-hover:scale-105"
                 />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                  <Maximize2 className="text-white opacity-0 group-hover:opacity-100 transition-opacity" size={32} />
+                </div>
               </div>
             ) : (
               <div className="h-64 rounded-2xl border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400 font-bold bg-gray-50">
@@ -174,6 +181,32 @@ export default function OrderDetailsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Modal de Foto em Tamanho Completo */}
+      {isPhotoModalOpen && hasPhoto && (
+        <div 
+          className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setIsPhotoModalOpen(false)}
+        >
+          <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPhotoModalOpen(false);
+              }}
+              className="absolute top-4 right-4 z-10 bg-white/90 hover:bg-white text-gray-800 rounded-full p-3 shadow-lg transition-all"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={order.photo_url}
+              alt={`Foto completa do pedido ${order.codigo_unico}`}
+              className="max-w-full max-h-full object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
