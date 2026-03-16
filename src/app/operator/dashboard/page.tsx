@@ -34,20 +34,31 @@ export default function OperatorDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
+  const audioNotification = useRef<HTMLAudioElement | null>(null);
 
   // Log para debug
   useEffect(() => {
     console.log("Dashboard mounted - authLoading:", authLoading, "user:", user, "loading:", loading);
   }, [authLoading, user, loading]);
 
+  // Inicializar áudio uma vez
+  useEffect(() => {
+    audioNotification.current = new Audio('/success.mp3');
+    // Pré-carregar o áudio
+    audioNotification.current.load();
+  }, []);
+
   const playNotification = useCallback(() => {
     try {
-      const audio = new Audio("/success.mp3");
-      audio.play().catch(() => {
-        // Ignorar erros de áudio
-      });
-    } catch {
-      // Ignorar erros
+      if (audioNotification.current) {
+        // Resetar para o início e tocar
+        audioNotification.current.currentTime = 0;
+        audioNotification.current.play().catch((err) => {
+          console.error("Erro ao tocar notificação:", err);
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao criar áudio:", err);
     }
   }, []);
 
