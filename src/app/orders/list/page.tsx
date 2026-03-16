@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
 import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
-import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye } from "lucide-react";
+import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye, FileText } from "lucide-react";
 
 export default function OrdersListPage() {
   const { user } = useAuth();
@@ -16,6 +16,7 @@ export default function OrdersListPage() {
   const [statusFilter, setStatusFilter] = useState<"Pendente" | "Concluído" | "Entregue">("Pendente");
   const [priorityModal, setPriorityModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [backToPendingModal, setBackToPendingModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
+  const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string }>({ isOpen: false, order: null, invoice: "" });
 
   useEffect(() => {
     fetchOrders();
@@ -123,10 +124,14 @@ export default function OrdersListPage() {
 
   const handleDeliverOrder = async (order: any) => {
     if (order.status !== "Concluído") return;
+    setInvoiceModal({ isOpen: true, order, invoice: order.invoice_number || "" });
+  };
 
-    const existingInvoice = order.invoice_number || "";
-    const invoice = prompt("Informe o número da nota fiscal:", existingInvoice);
-    if (!invoice || !invoice.trim()) {
+  const handleConfirmDeliverOrder = async () => {
+    if (!invoiceModal.order) return;
+    
+    const invoice = invoiceModal.invoice.trim();
+    if (!invoice) {
       showToast("Nota fiscal é obrigatória para entregar o pedido.", "error");
       return;
     }
@@ -134,12 +139,13 @@ export default function OrdersListPage() {
     try {
       const { error } = await supabase
         .from("orders")
-        .update({ status: "Entregue", invoice_number: invoice.trim() })
-        .eq("id", order.id);
+        .update({ status: "Entregue", invoice_number: invoice })
+        .eq("id", invoiceModal.order.id);
 
       if (error) throw error;
 
       showToast("Pedido marcado como entregue!");
+      setInvoiceModal({ isOpen: false, order: null, invoice: "" });
       await fetchOrders();
     } catch (err: any) {
       showToast(err.message || "Erro ao marcar pedido como entregue", "error");
@@ -413,6 +419,60 @@ export default function OrdersListPage() {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Nota Fiscal */}
+      {invoiceModal.isOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-6 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "" })} 
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-xl font-black text-[#262626] mb-3 flex items-center gap-2">
+              <FileText className="text-green-600" size={20} /> Nota Fiscal
+            </h2>
+            <p className="text-sm text-gray-600 font-bold mb-4">
+              Informe o número da nota fiscal para o pedido <span className="text-[#5D286C] font-black">{invoiceModal.order?.codigo_unico}</span>
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase ml-2 block mb-2">
+                  Número da Nota Fiscal
+                </label>
+                <input
+                  type="text"
+                  value={invoiceModal.invoice}
+                  onChange={(e) => setInvoiceModal({ ...invoiceModal, invoice: e.target.value })}
+                  placeholder="Ex: 123456"
+                  className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#5D286C] focus:bg-white rounded-2xl font-bold outline-none transition-all"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleConfirmDeliverOrder();
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleConfirmDeliverOrder}
+                  className="w-full bg-green-600 text-white p-3 rounded-2xl font-black text-sm shadow-lg hover:bg-green-700 transition-all"
+                >
+                  Confirmar Entrega
+                </button>
+                <button
+                  onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "" })}
+                  className="w-full bg-gray-100 text-gray-600 p-3 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>

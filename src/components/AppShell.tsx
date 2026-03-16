@@ -25,10 +25,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Definição do conteúdo principal para evitar repetição dentro do Provider
   const renderContent = () => {
-    if (isLoginPage || (!user && !loading)) {
+    if (isLoginPage) {
       return <>{children}</>;
     }
 
+    // Se não tiver user e não estiver loading, mostrar conteúdo sem menu
+    if (!user && !loading) {
+      return <>{children}</>;
+    }
+
+    // Se tiver user (mesmo durante loading), mostrar menu
     return (
       <div className="flex min-h-screen bg-gray-50/50 flex-col md:flex-row">
         {/* Menu Mobile Header */}

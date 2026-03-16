@@ -27,7 +27,9 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
 
   // Sincronizar role do contexto
   useEffect(() => {
-    setCurrentRole(contextRole);
+    if (contextRole) {
+      setCurrentRole(contextRole);
+    }
   }, [contextRole]);
 
   // Re-verificar role periodicamente para garantir que está atualizado
@@ -44,17 +46,26 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
         
         if (data?.role) {
           setCurrentRole(data.role);
+        } else {
+          // Se não encontrar role, usar padrão
+          setCurrentRole('OP_ESTOQUE');
         }
       } catch (err) {
         console.error("Error checking role:", err);
+        // Em caso de erro, usar role padrão
+        setCurrentRole(contextRole || 'OP_ESTOQUE');
       }
     };
     
-    checkRole();
+    // Verificar imediatamente se não tiver role
+    if (!currentRole && user) {
+      checkRole();
+    }
+    
     const interval = setInterval(checkRole, 30000); // Verificar a cada 30s
     
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, currentRole, contextRole]);
 
   const handleLogout = async () => {
     if (isLoggingOut) return; // Prevenir múltiplos cliques
@@ -77,6 +88,9 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
 
   // Não retornar null - sempre mostrar sidebar se tiver user, mesmo durante loading
   if (!user) return null;
+
+  // Se ainda estiver carregando o role, mostrar menu com role padrão temporário
+  const displayRole = currentRole || contextRole || 'OP_ESTOQUE';
 
   const menuItems = [
     { 
@@ -136,7 +150,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
 
       <nav className="flex-1 p-3 space-y-1 mt-4 overflow-y-auto">
         {menuItems.map((item) => {
-          if (!item.roles.includes(currentRole || "")) return null;
+          if (!item.roles.includes(displayRole)) return null;
           
           const hasSubItems = !!item.subItems;
           const isActive = pathname.startsWith(item.path);
