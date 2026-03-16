@@ -34,11 +34,11 @@ export default function LoginPage() {
         .single();
 
       if (profile?.role === 'OP_ESTOQUE' || profile?.role === 'OP_PRODUCAO') {
-        router.push("/operator/production");
+        router.push("/operator/dashboard");
       } else if (profile?.role === 'ADMIN') {
         router.push("/dashboard");
       } else {
-        router.push("/operator/production");
+        router.push("/operator/dashboard");
       }
     }
   };
