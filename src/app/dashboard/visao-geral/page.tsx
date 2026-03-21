@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
+import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
 const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
@@ -63,6 +64,8 @@ export default function VisaoGeralPage() {
     concluidos: true,
     entregues: true,
   });
+
+  useStuckLoadingRecovery(loading);
 
   useEffect(() => {
     fetchData();

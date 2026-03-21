@@ -25,6 +25,7 @@ import {
   ArrowUpWideNarrow,
 } from "lucide-react";
 import { formatDate } from "@/lib/date-utils";
+import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 const STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
 type StatusFilter = (typeof STATUSES)[number];
@@ -47,6 +48,8 @@ function OrdersListContent() {
   const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string }>({ isOpen: false, order: null, invoice: "" });
   const [revertDeliveredModal, setRevertDeliveredModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
+
+  useStuckLoadingRecovery(loading);
 
   useEffect(() => {
     const q = searchParams.get("status");

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle, Package, Clock, Volume2, TrendingUp, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
+import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 type OperatorOrder = {
   id: number;
@@ -37,6 +38,8 @@ export default function OperatorDashboardPage() {
   const fetchSeqRef = useRef(0);
   const audioNotification = useRef<HTMLAudioElement | null>(null);
   const previousOrdersRef = useRef<Set<number>>(new Set());
+
+  useStuckLoadingRecovery(Boolean(authLoading || (user && loading)));
 
   // Som de novo pedido: use /public/new_order.mp3 ou /public/success.mp3 (opcional).
   useEffect(() => {
@@ -138,19 +141,22 @@ export default function OperatorDashboardPage() {
         }
 
         setError(null);
-        setLoading(false);
       } catch (err: any) {
         if (seq !== fetchSeqRef.current) return;
 
         if (retriesLeft > 0) {
           await new Promise((r) => setTimeout(r, 1200 + (2 - retriesLeft) * 600));
           if (seq !== fetchSeqRef.current) return;
-          return fetchOrders(retriesLeft - 1);
+          await fetchOrders(retriesLeft - 1);
+          return;
         }
 
         setError(err?.message || "Erro ao carregar pedidos");
         setOrders([]);
-        setLoading(false);
+      } finally {
+        if (seq === fetchSeqRef.current) {
+          setLoading(false);
+        }
       }
     },
     [user, playNotification]

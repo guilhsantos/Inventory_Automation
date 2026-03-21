@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
+import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 const RETURN_STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
 
@@ -24,6 +25,8 @@ function OrderDetailsInner() {
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+
+  useStuckLoadingRecovery(loading);
 
   useEffect(() => {
     if (!orderId) return;

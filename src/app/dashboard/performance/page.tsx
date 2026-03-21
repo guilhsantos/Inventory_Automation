@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Activity, Calendar, Download, Package, ArrowDown, ArrowUp, Cpu } from "lucide-react";
 import { brDayRangeIso, formatDate, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
+import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 const KG_POR_SACO = 25;
 
@@ -52,6 +53,8 @@ export default function PerformancePage() {
     mediaKitsDia: 0,
   });
   const [exportRange, setExportRange] = useState({ start: "", end: "" });
+
+  useStuckLoadingRecovery(loading);
 
   useEffect(() => {
     supabase
