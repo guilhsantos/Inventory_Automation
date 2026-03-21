@@ -95,7 +95,9 @@ export default function PerformancePage() {
       if (params.mode === "molde") {
         let prodQ = supabase
           .from("daily_production")
-          .select("molde_id, machine_id, quantidade_boa, sacos_usados, created_at, moldes(nome), machines(nome)")
+          .select(
+            "molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, moldes(nome), machines(nome), materials(nome)"
+          )
           .gte("created_at", startIso)
           .lte("created_at", endIso);
         if (mid != null && !Number.isNaN(mid)) prodQ = prodQ.eq("machine_id", mid);
@@ -123,7 +125,7 @@ export default function PerformancePage() {
         movements = movRes.data || [];
         const prodRes = await supabase
           .from("daily_production")
-          .select("molde_id, machine_id, quantidade_boa, sacos_usados, created_at")
+          .select("molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, materials(nome)")
           .gte("created_at", startIso)
           .lte("created_at", endIso);
         production = prodRes.data || [];
@@ -227,7 +229,7 @@ export default function PerformancePage() {
               kind: "producao",
               molde: row.moldes?.nome || "—",
               maquina: row.machines?.nome || "—",
-              material: "—",
+              material: row.materials?.nome || "—",
               dataRaw: row.created_at,
               qtd: row.quantidade_boa || 0,
               kg,

@@ -275,9 +275,9 @@ export default function VisaoGeralPage() {
               ))}
             </div>
           </div>
-          <div className="h-[400px] w-full min-h-[320px]">
+          <div className="h-[400px] w-full min-h-[320px] min-w-0 overflow-hidden">
             {ordersChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={ordersChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis

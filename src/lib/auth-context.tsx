@@ -62,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const authInitFinishedRef = useRef(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -95,9 +96,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    authInitFinishedRef.current = false;
+
     authTimeoutRef.current = setTimeout(() => {
-      console.warn("Auth initialization timeout - forcing loading false");
+      if (authInitFinishedRef.current) return;
+
       setLoading(false);
+
+      const onLoginPage =
+        typeof window !== "undefined" &&
+        (window.location.pathname === "/login" || window.location.pathname.endsWith("/login"));
+
+      if (onLoginPage) {
+        return;
+      }
+
+      void supabase.auth.signOut().finally(() => {
+        window.location.href = "/login";
+      });
     }, 12000);
 
     const initializeAuth = async () => {
@@ -114,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error("Auth initialization error:", err);
         await handleUserSession(null);
       } finally {
+        authInitFinishedRef.current = true;
         if (authTimeoutRef.current) {
           clearTimeout(authTimeoutRef.current);
           authTimeoutRef.current = null;
@@ -127,12 +144,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        await handleUserSession(session);
-      } else if (event === "SIGNED_OUT") {
-        await handleUserSession(null);
+      try {
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          await handleUserSession(session);
+        } else if (event === "SIGNED_OUT") {
+          await handleUserSession(null);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {

@@ -111,7 +111,8 @@ export default function ManualProductionPage() {
         machine_id: parseInt(selectedMachine),
         usuario_id: user.id,
         quantidade_boa: qtyInt,
-        sacos_usados: bagsInt
+        sacos_usados: bagsInt,
+        material_id: parseInt(selectedMaterial),
       });
 
       if (logError) throw logError;

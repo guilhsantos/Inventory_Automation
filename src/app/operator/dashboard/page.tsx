@@ -33,10 +33,10 @@ export default function OperatorDashboardPage() {
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
+  const fetchSeqRef = useRef(0);
   const audioNotification = useRef<HTMLAudioElement | null>(null);
-  const previousOrdersRef = useRef<Set<number>>(new Set()); // Novo ref para guardar IDs anteriores
+  const previousOrdersRef = useRef<Set<number>>(new Set());
 
   // Som de novo pedido: use /public/new_order.mp3 ou /public/success.mp3 (opcional).
   useEffect(() => {
@@ -71,138 +71,103 @@ export default function OperatorDashboardPage() {
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Guardar IDs anteriores do ref (não causa re-render)
-      const previousOrderIds = previousOrdersRef.current;
-      
-      const { data, error: queryError } = await supabase
-        .from("orders")
-        .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
-        .eq("status", "Pendente")
-        .order("is_priority", { ascending: false })
-        .order("priority_position", { ascending: true, nullsFirst: true })
-        .order("created_at", { ascending: true });
-
-      if (queryError) {
-        setError(queryError.message);
-        setOrders([]);
+  const fetchOrders = useCallback(
+    async (retriesLeft = 2) => {
+      if (!user) {
         setLoading(false);
         return;
       }
 
-      if (data) {
-        // Calcular porcentagem de estoque para cada pedido
-        const ordersWithStock = data.map((order: any) => {
-          let totalNeeded = 0;
-          let totalAvailable = 0;
-          
-          order.order_items?.forEach((item: any) => {
-            const needed = item.quantidade || 0;
-            const available = item.kits?.estoque_atual || 0;
-            totalNeeded += needed;
-            totalAvailable += Math.min(needed, available);
-          });
-          
-          const stockPercentage = totalNeeded > 0 ? Math.round((totalAvailable / totalNeeded) * 100) : 100;
-          
-          return { ...order, stockPercentage };
-        });
-        
-        // Verificar se há novos pedidos comparando com o ref
-        const newOrderIds = new Set<number>(ordersWithStock.map((o: any) => o.id as number));
-        const hasNewOrders = previousOrderIds.size > 0 && 
-          Array.from(newOrderIds).some((id: number) => !previousOrderIds.has(id));
-        
-        if (hasNewOrders) {
-          console.log("Novo pedido detectado via comparação de lista");
-          playNotification();
+      const seq = ++fetchSeqRef.current;
+      const isFirstAttempt = retriesLeft === 2;
+
+      if (isFirstAttempt) {
+        setLoading(true);
+        setError(null);
+      }
+
+      const previousOrderIds = previousOrdersRef.current;
+
+      try {
+        const { data, error: queryError } = await supabase
+          .from("orders")
+          .select(
+            "id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))"
+          )
+          .eq("status", "Pendente")
+          .order("is_priority", { ascending: false })
+          .order("priority_position", { ascending: true, nullsFirst: true })
+          .order("created_at", { ascending: true });
+
+        if (seq !== fetchSeqRef.current) return;
+
+        if (queryError) {
+          throw new Error(queryError.message);
         }
-        
-        // Atualizar o ref com os novos IDs
-        previousOrdersRef.current = newOrderIds;
-        
-        setOrders(ordersWithStock as OperatorOrder[]);
-      } else {
-        previousOrdersRef.current = new Set();
-        setOrders([]);
-      }
-    } catch (err: any) {
-      setError(err?.message || "Erro ao carregar pedidos");
-      setOrders([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, playNotification]);
 
-  useEffect(() => {
-    console.log("AuthLoading changed:", authLoading);
-    
-    // Timeout mais curto: 3 segundos
-    if (authLoading) {
-      timeoutRef.current = setTimeout(() => {
-        console.warn("Auth loading timeout - forcing continue");
-        setLoading(false);
-      }, 3000);
-    } else {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    }
+        if (data) {
+          const ordersWithStock = data.map((order: any) => {
+            let totalNeeded = 0;
+            let totalAvailable = 0;
 
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [authLoading]);
+            order.order_items?.forEach((item: any) => {
+              const needed = item.quantidade || 0;
+              const available = item.kits?.estoque_atual || 0;
+              totalNeeded += needed;
+              totalAvailable += Math.min(needed, available);
+            });
 
-  // Timeout geral de segurança: força renderização após 8 segundos
-  useEffect(() => {
-    const globalTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn("Global loading timeout - forcing render");
-        setLoading(false);
-        if (orders.length === 0) {
+            const stockPercentage = totalNeeded > 0 ? Math.round((totalAvailable / totalNeeded) * 100) : 100;
+
+            return { ...order, stockPercentage };
+          });
+
+          const newOrderIds = new Set<number>(ordersWithStock.map((o: any) => o.id as number));
+          const hasNewOrders =
+            previousOrderIds.size > 0 && Array.from(newOrderIds).some((id: number) => !previousOrderIds.has(id));
+
+          if (hasNewOrders) {
+            playNotification();
+          }
+
+          previousOrdersRef.current = newOrderIds;
+          setOrders(ordersWithStock as OperatorOrder[]);
+        } else {
+          previousOrdersRef.current = new Set();
           setOrders([]);
         }
-      }
-    }, 8000);
 
-    return () => clearTimeout(globalTimeout);
-  }, [loading, orders.length]);
+        setError(null);
+        setLoading(false);
+      } catch (err: any) {
+        if (seq !== fetchSeqRef.current) return;
+
+        if (retriesLeft > 0) {
+          await new Promise((r) => setTimeout(r, 1200 + (2 - retriesLeft) * 600));
+          if (seq !== fetchSeqRef.current) return;
+          return fetchOrders(retriesLeft - 1);
+        }
+
+        setError(err?.message || "Erro ao carregar pedidos");
+        setOrders([]);
+        setLoading(false);
+      }
+    },
+    [user, playNotification]
+  );
 
   useEffect(() => {
-    console.log("Main useEffect - authLoading:", authLoading, "user:", user);
-    
-    // Aguardar autenticação antes de buscar dados
-    if (authLoading) {
-      console.log("Waiting for auth...");
-      return;
-    }
-    
+    if (authLoading) return;
+
     if (!user) {
-      console.log("No user, redirecting to login");
       router.push("/login");
       return;
     }
 
-    // Evitar múltiplas inicializações
     if (hasInitializedRef.current) {
-      console.log("Already initialized, skipping");
       return;
     }
-    
-    console.log("Initializing fetchOrders and Realtime");
+
     hasInitializedRef.current = true;
     fetchOrders();
 
@@ -216,51 +181,45 @@ export default function OperatorDashboardPage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "orders" },
           (payload) => {
-            console.log("Realtime event received:", payload.eventType, payload);
-            
             const newRecord = payload.new as { status?: string; is_priority?: boolean; id?: number } | null;
             const oldRecord = payload.old as { status?: string; is_priority?: boolean } | null;
-            
-            // Detectar novo pedido (INSERT com status Pendente)
+
             if (payload.eventType === "INSERT" && newRecord?.status === "Pendente") {
-              console.log("Novo pedido detectado (INSERT):", newRecord.id);
               playNotification();
               fetchOrders();
             }
-            
-            // Detectar pedido que foi atualizado para Pendente
-            if (payload.eventType === "UPDATE" && newRecord?.status === "Pendente" && oldRecord?.status !== "Pendente") {
-              console.log("Pedido atualizado para Pendente (UPDATE):", newRecord.id);
+
+            if (
+              payload.eventType === "UPDATE" &&
+              newRecord?.status === "Pendente" &&
+              oldRecord?.status !== "Pendente"
+            ) {
               playNotification();
               fetchOrders();
             }
-            
-            // Detectar mudança de prioridade
-            if (payload.eventType === "UPDATE" && oldRecord && newRecord && oldRecord.is_priority !== newRecord.is_priority) {
-              console.log("Prioridade alterada (UPDATE):", newRecord.id);
+
+            if (
+              payload.eventType === "UPDATE" &&
+              oldRecord &&
+              newRecord &&
+              oldRecord.is_priority !== newRecord.is_priority
+            ) {
               playNotification();
               fetchOrders();
             }
           }
         )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            console.log("Realtime subscribed");
-          } else if (status === "CHANNEL_ERROR") {
-            console.error("Realtime channel error");
-          } else {
-            console.log("Realtime status:", status);
-          }
-        });
+        .subscribe(() => {});
 
       interval = setInterval(() => {
         fetchOrders();
       }, 30000);
-    } catch (err) {
-      console.error("Error setting up realtime:", err);
+    } catch {
+      /* realtime opcional */
     }
 
     return () => {
+      fetchSeqRef.current += 1;
       hasInitializedRef.current = false;
       if (channel) {
         supabase.removeChannel(channel);
@@ -280,34 +239,7 @@ export default function OperatorDashboardPage() {
     );
   }
 
-  // Mostrar loading enquanto busca dados (menos restritivo)
-  if (loading && orders.length === 0 && !error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-[#5D286C]" size={48} />
-      </div>
-    );
-  }
-
-  // Mostrar erro se houver
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center space-y-4">
-          <AlertTriangle className="mx-auto text-red-500" size={48} />
-          <p className="text-lg font-bold text-red-600">{error}</p>
-          <button
-            onClick={fetchOrders}
-            className="px-4 py-2 bg-[#5D286C] text-white rounded-lg font-bold"
-          >
-            Tentar Novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const currentOrder = orders.find(o => o.is_priority) || orders[0];
+  const currentOrder = orders.find((o) => o.is_priority) || orders[0];
   const queueOrders = orders.filter(o => o.id !== currentOrder?.id);
 
   const totalKits = (order: OperatorOrder) => order.order_items?.reduce((acc, i) => acc + (i.quantidade || 0), 0) || 0;
@@ -323,10 +255,30 @@ export default function OperatorDashboardPage() {
             <p className="text-xs md:text-sm text-gray-400 font-bold uppercase tracking-[0.3em] mt-1">
               Pedidos pendentes organizados por prioridade
             </p>
+            {loading && orders.length === 0 && !error && (
+              <p className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-yellow-200/90">
+                <Loader2 className="animate-spin" size={16} /> Sincronizando fila…
+              </p>
+            )}
+            {error && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm">
+                <AlertTriangle className="text-red-400 shrink-0" size={20} />
+                <span className="font-bold text-red-200">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => fetchOrders()}
+                  className="ml-auto rounded-xl bg-white/10 px-3 py-1.5 text-xs font-black uppercase hover:bg-white/20"
+                >
+                  Tentar de novo
+                </button>
+              </div>
+            )}
           </div>
           <button
-            onClick={fetchOrders}
-            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest hover:bg-white/10"
+            type="button"
+            disabled={loading}
+            onClick={() => fetchOrders()}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest hover:bg-white/10 disabled:opacity-50"
           >
             <Clock size={14} /> Atualizar
           </button>
