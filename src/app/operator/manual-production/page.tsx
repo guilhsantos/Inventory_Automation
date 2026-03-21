@@ -7,6 +7,7 @@ import { Loader2, Hammer, Box, Save, ArrowLeft, Cpu, AlertTriangle, X } from "lu
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/toast-context";
+import { clearClientStorageAndGoLogin } from "@/lib/session-recovery";
 
 interface Molde {
   id: number;
@@ -42,19 +43,53 @@ export default function ManualProductionPage() {
   const [bagsUsed, setBagsUsed] = useState<string>("");
 
   useEffect(() => {
+    let cancelled = false;
+    const loadTimeoutMs = 15000;
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        void supabase.auth.signOut();
+        clearClientStorageAndGoLogin();
+      }
+    }, loadTimeoutMs);
+
     async function fetchData() {
-      const [moldesRes, machinesRes, materialsRes] = await Promise.all([
-        supabase.from("moldes").select("id, nome").order("nome"),
-        supabase.from("machines").select("id, nome").order("nome"),
-        supabase.from("materials").select("id, nome, estoque_kg").order("nome")
-      ]);
-      
-      if (moldesRes.data) setMoldes(moldesRes.data);
-      if (machinesRes.data) setMachines(machinesRes.data);
-      if (materialsRes.data) setMaterials(materialsRes.data);
-      setLoading(false);
+      try {
+        const [moldesRes, machinesRes, materialsRes] = await Promise.all([
+          supabase.from("moldes").select("id, nome").order("nome"),
+          supabase.from("machines").select("id, nome").order("nome"),
+          supabase.from("materials").select("id, nome, estoque_kg").order("nome"),
+        ]);
+
+        if (cancelled) return;
+
+        const failed =
+          !!moldesRes.error && !!machinesRes.error && !!materialsRes.error;
+        if (failed) {
+          void supabase.auth.signOut();
+          clearClientStorageAndGoLogin();
+          return;
+        }
+
+        if (moldesRes.data) setMoldes(moldesRes.data);
+        if (machinesRes.data) setMachines(machinesRes.data);
+        if (materialsRes.data) setMaterials(materialsRes.data);
+      } catch {
+        if (!cancelled) {
+          void supabase.auth.signOut();
+          clearClientStorageAndGoLogin();
+        }
+      } finally {
+        window.clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
+      }
     }
-    fetchData();
+
+    void fetchData();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleProduction = async (e: React.FormEvent) => {

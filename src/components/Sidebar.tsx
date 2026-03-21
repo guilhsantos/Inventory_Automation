@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
+import { clearClientStorageAndGoLogin } from "@/lib/session-recovery";
 import { 
   LayoutDashboard, QrCode, Settings, LogOut, 
   User, ChevronLeft, ChevronRight, ShoppingCart,
@@ -17,8 +18,14 @@ interface SidebarProps {
   onCloseMobile?: () => void;
 }
 
+function roleDisplayLabel(role: string): string {
+  if (role === "ADMIN") return "Administrador";
+  if (role === "OP_ESTOQUE") return "Operador";
+  return role;
+}
+
 export default function Sidebar({ onCloseMobile }: SidebarProps) {
-  const { user, role: contextRole, loading } = useAuth();
+  const { user, role: contextRole } = useAuth();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -44,15 +51,13 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
           .eq("id", user.id)
           .single();
 
-        if (error) {
-          console.error("Error checking role:", error);
+        if (error || !data?.role) {
+          setCurrentRole("OP_ESTOQUE");
           return;
         }
-        if (data?.role) {
-          setCurrentRole(data.role);
-        }
-      } catch (err) {
-        console.error("Error checking role:", err);
+        setCurrentRole(data.role);
+      } catch {
+        setCurrentRole("OP_ESTOQUE");
       }
     };
     
@@ -66,19 +71,30 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     return () => clearInterval(interval);
   }, [user, currentRole, contextRole]);
 
-  const handleLogout = async () => {
-    if (isLoggingOut) return; // Prevenir múltiplos cliques
+  const handleLogout = () => {
+    if (isLoggingOut) return;
     setIsLoggingOut(true);
-    try {
-      await supabase.auth.signOut();
-      localStorage.removeItem('reauto-inventory-auth');
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Erro ao fazer logout:", error);
-      // Forçar redirecionamento mesmo em caso de erro
-      localStorage.clear();
-      window.location.href = "/login";
-    }
+
+    const forceMs = 5000;
+    const forceTimer = window.setTimeout(() => {
+      clearClientStorageAndGoLogin();
+    }, forceMs);
+
+    void supabase.auth
+      .signOut()
+      .then(() => {
+        window.clearTimeout(forceTimer);
+        try {
+          localStorage.removeItem("reauto-inventory-auth");
+        } catch {
+          /* ignore */
+        }
+        window.location.href = "/login";
+      })
+      .catch(() => {
+        window.clearTimeout(forceTimer);
+        clearClientStorageAndGoLogin();
+      });
   };
 
   const toggleSubmenu = (name: string) => {
@@ -205,7 +221,9 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
           {!isCollapsed && (
             <div className="overflow-hidden">
               <p className="text-sm font-black text-[#262626] truncate uppercase">{user.email?.split("@")[0]}</p>
-              <p className="text-[10px] font-bold text-[#5D286C] uppercase tracking-widest">{currentRole || "Carregando..."}</p>
+              <p className="text-[10px] font-bold text-[#5D286C] uppercase tracking-widest">
+                {roleDisplayLabel(displayRole)}
+              </p>
             </div>
           )}
         </div>
