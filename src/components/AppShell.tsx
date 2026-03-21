@@ -10,7 +10,7 @@ import Image from "next/image";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 function StuckAuthLoadingRecovery({ active }: { active: boolean }) {
-  useStuckLoadingRecovery(active, 16000);
+  useStuckLoadingRecovery(active);
   return null;
 }
 
