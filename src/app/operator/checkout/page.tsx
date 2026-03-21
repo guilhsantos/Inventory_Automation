@@ -106,9 +106,10 @@ export default function OrderCheckoutPage() {
       // Atualizar pedido: status para Concluído e salvar foto
       const { error: updateError } = await supabase
         .from("orders")
-        .update({ 
-          status: "Concluído", 
-          photo_url: publicUrl 
+        .update({
+          status: "Concluído",
+          photo_url: publicUrl,
+          concluido_em: new Date().toISOString(),
         })
         .eq("id", order.id);
 

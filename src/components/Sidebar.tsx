@@ -38,22 +38,21 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     
     const checkRole = async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", user.id)
           .single();
-        
+
+        if (error) {
+          console.error("Error checking role:", error);
+          return;
+        }
         if (data?.role) {
           setCurrentRole(data.role);
-        } else {
-          // Se não encontrar role, usar padrão
-          setCurrentRole('OP_ESTOQUE');
         }
       } catch (err) {
         console.error("Error checking role:", err);
-        // Em caso de erro, usar role padrão
-        setCurrentRole(contextRole || 'OP_ESTOQUE');
       }
     };
     
@@ -101,7 +100,6 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
       subItems: [
         { name: "Visão Geral", path: "/dashboard/visao-geral", icon: <Eye size={18} /> },
         { name: "Performance", path: "/dashboard/performance", icon: <TrendingUp size={18} /> },
-        { name: "Estoque", path: "/dashboard/estoque", icon: <Warehouse size={18} /> },
       ]
     },
     { 
@@ -122,6 +120,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
       subItems: [
         { name: "Dashboard", path: "/operator/dashboard", icon: <LayoutDashboard size={18} /> },
         { name: "Operação", path: "/operator/production", icon: <QrCode size={18} /> },
+        { name: "Estoque", path: "/operator/estoque", icon: <Warehouse size={18} /> },
       ]
     },
     { 

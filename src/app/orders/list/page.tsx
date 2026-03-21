@@ -1,29 +1,73 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
-import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
-import { ShoppingCart, CheckCircle, Clock, Package, Search, Loader2, Star, StarOff, Undo2, Edit, X, Eye, FileText, Trash2, AlertTriangle } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ShoppingCart,
+  CheckCircle,
+  Clock,
+  Package,
+  Search,
+  Loader2,
+  Star,
+  StarOff,
+  Undo2,
+  Edit,
+  X,
+  Eye,
+  FileText,
+  Trash2,
+  AlertTriangle,
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+} from "lucide-react";
 import { formatDate } from "@/lib/date-utils";
 
-export default function OrdersListPage() {
-  const { user } = useAuth();
+const STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
+type StatusFilter = (typeof STATUSES)[number];
+
+function parseCodigoOrder(a: string, b: string): number {
+  return String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+}
+
+function OrdersListContent() {
   const { showToast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"Pendente" | "Concluído" | "Entregue">("Pendente");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("Pendente");
+  const [codeSortDesc, setCodeSortDesc] = useState(false);
   const [priorityModal, setPriorityModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [backToPendingModal, setBackToPendingModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string }>({ isOpen: false, order: null, invoice: "" });
+  const [revertDeliveredModal, setRevertDeliveredModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
+
+  useEffect(() => {
+    const q = searchParams.get("status");
+    if (q && STATUSES.includes(q as StatusFilter)) {
+      setStatusFilter(q as StatusFilter);
+    } else if (!q) {
+      router.replace("/orders/list?status=Pendente", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
+
+  function setStatusTab(status: StatusFilter) {
+    setStatusFilter(status);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("status", status);
+    router.replace(`/orders/list?${params.toString()}`, { scroll: false });
+  }
 
   async function fetchOrders() {
     setLoading(true);
@@ -33,15 +77,16 @@ export default function OrdersListPage() {
         .select("*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
         .eq("status", statusFilter);
 
-      // Ordenação com tratamento de erro
-      try {
-        query = query.order("is_priority", { ascending: false })
-                     .order("priority_position", { ascending: true });
-      } catch (e) {
-        // Se campos não existirem, continua sem ordenação por prioridade
+      if (statusFilter === "Pendente") {
+        try {
+          query = query.order("is_priority", { ascending: false }).order("priority_position", { ascending: true });
+        } catch {
+          /* ignore */
+        }
+        query = query.order("created_at", { ascending: true });
+      } else {
+        query = query.order("created_at", { ascending: false });
       }
-
-      query = query.order("created_at", { ascending: statusFilter === "Pendente" });
 
       const { data, error } = await query;
 
@@ -139,18 +184,66 @@ export default function OrdersListPage() {
     }
 
     try {
-      const { error } = await supabase
+      const entregueEm = new Date().toISOString();
+      const { data: updated, error } = await supabase
         .from("orders")
-        .update({ status: "Entregue", invoice_number: invoice })
-        .eq("id", invoiceModal.order.id);
+        .update({
+          status: "Entregue",
+          invoice_number: invoice,
+          entregue_em: entregueEm,
+        })
+        .eq("id", invoiceModal.order.id)
+        .select("id, entregue_em")
+        .single();
 
       if (error) throw error;
+      if (!updated?.entregue_em) {
+        showToast("A entrega foi registrada, mas entregue_em não retornou do servidor. Verifique políticas RLS ou a coluna no banco.", "error");
+        setInvoiceModal({ isOpen: false, order: null, invoice: "" });
+        await fetchOrders();
+        return;
+      }
 
       showToast("Pedido marcado como entregue!");
       setInvoiceModal({ isOpen: false, order: null, invoice: "" });
       await fetchOrders();
     } catch (err: any) {
       showToast(err.message || "Erro ao marcar pedido como entregue", "error");
+    }
+  };
+
+  const handleRevertDeliveredToConcluded = (order: any) => {
+    if (order.status !== "Entregue") return;
+    setRevertDeliveredModal({ isOpen: true, order });
+  };
+
+  const handleConfirmRevertDelivered = async () => {
+    if (!revertDeliveredModal.order) return;
+    const order = revertDeliveredModal.order;
+
+    try {
+      const { data: updated, error } = await supabase
+        .from("orders")
+        .update({
+          status: "Concluído",
+          entregue_em: null,
+          invoice_number: null,
+        })
+        .eq("id", order.id)
+        .select("id, status, entregue_em")
+        .single();
+
+      if (error) throw error;
+      if (updated?.status !== "Concluído") {
+        showToast("Não foi possível confirmar a reversão no servidor.", "error");
+        return;
+      }
+
+      showToast("Pedido voltou para Concluído (NF e data de entrega removidas).");
+      setRevertDeliveredModal({ isOpen: false, order: null });
+      await fetchOrders();
+    } catch (err: any) {
+      showToast(err.message || "Erro ao reverter entrega", "error");
     }
   };
 
@@ -180,7 +273,12 @@ export default function OrdersListPage() {
       // Atualizar pedido: voltar para Pendente e limpar foto
       const { error } = await supabase
         .from("orders")
-        .update({ status: "Pendente", photo_url: null })
+        .update({
+          status: "Pendente",
+          photo_url: null,
+          concluido_em: null,
+          entregue_em: null,
+        })
         .eq("id", order.id);
 
       if (error) throw error;
@@ -227,14 +325,23 @@ export default function OrdersListPage() {
     }
   };
 
-  const filteredOrders = orders.filter((o: any) => {
+  const filteredOrders = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return (
-      o.cliente.toLowerCase().includes(term) ||
-      o.codigo_unico.toLowerCase().includes(term) ||
-      (o.invoice_number || "").toLowerCase().includes(term)
-    );
-  });
+    let list = orders.filter((o: any) => {
+      return (
+        o.cliente.toLowerCase().includes(term) ||
+        String(o.codigo_unico).toLowerCase().includes(term) ||
+        (o.invoice_number || "").toLowerCase().includes(term)
+      );
+    });
+    if (statusFilter === "Concluído" || statusFilter === "Entregue") {
+      list = [...list].sort((a, b) => {
+        const cmp = parseCodigoOrder(a.codigo_unico, b.codigo_unico);
+        return codeSortDesc ? -cmp : cmp;
+      });
+    }
+    return list;
+  }, [orders, searchTerm, statusFilter, codeSortDesc]);
 
   if (loading) return <Loader2 className="animate-spin mx-auto mt-20" size={40} />;
 
@@ -245,20 +352,31 @@ export default function OrdersListPage() {
           <h1 className="text-3xl font-black text-[#262626] flex items-center gap-3">
             <ShoppingCart className="text-[#5D286C]" /> Lista de Pedidos
           </h1>
-          <div className="mt-4 inline-flex gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase">
-            {["Pendente", "Concluído", "Entregue"].map((status) => (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="inline-flex gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase">
+              {STATUSES.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setStatusTab(status)}
+                  className={`px-3 py-2 rounded-2xl transition-all ${
+                    statusFilter === status ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+            {(statusFilter === "Concluído" || statusFilter === "Entregue") && (
               <button
-                key={status}
-                onClick={() => setStatusFilter(status as any)}
-                className={`px-3 py-2 rounded-2xl transition-all ${
-                  statusFilter === status
-                    ? "bg-white text-[#5D286C] shadow-sm"
-                    : "text-gray-400"
-                }`}
+                type="button"
+                onClick={() => setCodeSortDesc((v) => !v)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-white border-2 border-gray-100 text-xs font-black text-[#5D286C] hover:border-[#5D286C]"
+                title="Ordenar por código do pedido"
               >
-                {status}
+                Código {codeSortDesc ? <ArrowDownWideNarrow size={16} /> : <ArrowUpWideNarrow size={16} />}
               </button>
-            ))}
+            )}
           </div>
         </div>
         <div className="relative w-full md:w-80">
@@ -279,7 +397,10 @@ export default function OrdersListPage() {
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="font-black text-[#5D286C] text-lg">
-                  <Link href={`/orders/${order.id}`} className="hover:underline">
+                  <Link
+                    href={`/orders/${order.id}?returnStatus=${encodeURIComponent(statusFilter)}`}
+                    className="hover:underline"
+                  >
                     {order.codigo_unico}
                   </Link>
                 </span>
@@ -352,7 +473,7 @@ export default function OrdersListPage() {
                 {statusFilter === "Concluído" && (
                   <>
                     <Link
-                      href={`/orders/${order.id}`}
+                      href={`/orders/${order.id}?returnStatus=${encodeURIComponent(statusFilter)}`}
                       className="bg-[#5D286C] text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-[#7B1470] transition-all"
                     >
                       <Eye size={16} /> Ver Detalhes
@@ -375,12 +496,21 @@ export default function OrdersListPage() {
                 )}
 
                 {statusFilter === "Entregue" && (
-                  <Link
-                    href={`/orders/${order.id}`}
-                    className="bg-[#5D286C] text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-[#7B1470] transition-all"
-                  >
-                    <Eye size={16} /> Ver Detalhes
-                  </Link>
+                  <>
+                    <Link
+                      href={`/orders/${order.id}?returnStatus=${encodeURIComponent(statusFilter)}`}
+                      className="bg-[#5D286C] text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-[#7B1470] transition-all"
+                    >
+                      <Eye size={16} /> Ver Detalhes
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleRevertDeliveredToConcluded(order)}
+                      className="bg-amber-50 text-amber-800 px-6 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-amber-100 transition-all"
+                    >
+                      <Undo2 size={16} /> Voltar para Concluído
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -458,6 +588,42 @@ export default function OrdersListPage() {
               </button>
               <button
                 onClick={() => setBackToPendingModal({ isOpen: false, order: null })}
+                className="w-full bg-gray-100 text-gray-600 p-3 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Entregue → Concluído */}
+      {revertDeliveredModal.isOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md p-6 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setRevertDeliveredModal({ isOpen: false, order: null })}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-xl font-black text-[#262626] mb-3 flex items-center gap-2">
+              <Undo2 className="text-amber-600" size={20} /> Voltar para Concluído
+            </h2>
+            <p className="text-sm text-gray-600 font-bold mb-4">
+              O pedido <span className="text-[#5D286C] font-black">{revertDeliveredModal.order?.codigo_unico}</span> sairá de Entregue e voltará para Concluído. A nota fiscal e a data de entrega serão apagadas.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmRevertDelivered}
+                className="w-full bg-amber-600 text-white p-3 rounded-2xl font-black text-sm shadow-lg hover:bg-amber-700 transition-all"
+              >
+                Confirmar
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevertDeliveredModal({ isOpen: false, order: null })}
                 className="w-full bg-gray-100 text-gray-600 p-3 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
               >
                 Cancelar
@@ -557,5 +723,19 @@ export default function OrdersListPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OrdersListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+        </div>
+      }
+    >
+      <OrdersListContent />
+    </Suspense>
   );
 }

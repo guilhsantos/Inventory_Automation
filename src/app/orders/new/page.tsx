@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
-import { ShoppingCart, Plus, Trash2, Save, ArrowLeft, Calendar, User, Hash, Star } from "lucide-react";
+import { Plus, Trash2, Save, ArrowLeft, Calendar, User, Hash, Star, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -17,14 +17,28 @@ export default function NewOrderPage() {
   const [selectedKits, setSelectedKits] = useState<{kit_id: number, qty: number}[]>([]);
   const [currentKitSelection, setCurrentKitSelection] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [kitsLoading, setKitsLoading] = useState(true);
+  const [kitsError, setKitsError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchKits();
+    void fetchKits();
   }, []);
 
   async function fetchKits() {
-    const { data } = await supabase.from("kits").select("id, nome_kit, codigo_unico").order("nome_kit");
-    if (data) setAvailableKits(data);
+    setKitsLoading(true);
+    setKitsError(null);
+    try {
+      const { data, error } = await supabase.from("kits").select("id, nome_kit, codigo_unico").order("nome_kit");
+      if (error) throw error;
+      setAvailableKits(data ?? []);
+    } catch (e: any) {
+      const msg = e?.message ?? "Não foi possível carregar os kits.";
+      setKitsError(msg);
+      setAvailableKits([]);
+      showToast(msg, "error");
+    } finally {
+      setKitsLoading(false);
+    }
   }
 
   const handleAddKit = () => {
@@ -174,22 +188,43 @@ export default function NewOrderPage() {
         {/* Seleção de Kits */}
         <div className="bg-white p-4 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4 overflow-hidden">
           <h2 className="text-lg md:text-xl font-black flex items-center gap-2 text-[#5D286C]"><Plus /> Adicionar Kits ao Pedido</h2>
+
+          {kitsLoading && (
+            <div className="flex items-center gap-3 text-gray-500 font-bold text-sm py-2">
+              <Loader2 className="animate-spin text-[#5D286C]" size={22} />
+              Carregando kits...
+            </div>
+          )}
+          {!kitsLoading && kitsError && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-800 text-sm font-bold">
+              <span className="flex-1">{kitsError}</span>
+              <button
+                type="button"
+                onClick={() => void fetchKits()}
+                className="shrink-0 bg-white border-2 border-red-200 px-4 py-2 rounded-xl hover:bg-red-100 transition-colors"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
           
           <div className="flex flex-col sm:flex-row gap-2">
             <select 
               value={currentKitSelection} 
               onChange={e => setCurrentKitSelection(e.target.value)} 
-              className="flex-1 p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base appearance-none"
+              disabled={kitsLoading || !!kitsError}
+              className="flex-1 p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] text-sm md:text-base appearance-none disabled:opacity-50"
             >
-              <option value="">Selecione um Kit...</option>
+              <option value="">{kitsLoading ? "Carregando..." : "Selecione um Kit..."}</option>
               {availableKits.map(k => (
                 <option key={k.id} value={k.id}>{k.codigo_unico} - {k.nome_kit}</option>
               ))}
             </select>
             <button 
               type="button"
-              onClick={handleAddKit} 
-              className="bg-[#5D286C] text-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0 flex items-center justify-center"
+              onClick={handleAddKit}
+              disabled={kitsLoading || !!kitsError}
+              className="bg-[#5D286C] text-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0 flex items-center justify-center disabled:opacity-50 disabled:hover:scale-100"
             >
               <Plus size={20} className="md:hidden"/><Plus size={24} className="hidden md:block"/>
             </button>

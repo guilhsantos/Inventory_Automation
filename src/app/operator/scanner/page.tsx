@@ -24,6 +24,7 @@ export default function ScannerPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [kitQty, setKitQty] = useState("1");
   const inputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
@@ -52,15 +53,17 @@ export default function ScannerPage() {
 
   // Mantém foco no input oculto para leitores externos
   useEffect(() => {
-    const focusInput = () => { if (!scanResult) inputRef.current?.focus(); };
+    const focusInput = () => {
+      if (!itemInfo) inputRef.current?.focus();
+    };
     focusInput();
-    const interval = setInterval(focusInput, 2000); // Re-foca a cada 2s caso perca
+    const interval = setInterval(focusInput, 2000);
     window.addEventListener("click", focusInput);
     return () => {
       window.removeEventListener("click", focusInput);
       clearInterval(interval);
     };
-  }, [scanResult]);
+  }, [itemInfo]);
 
   const handleIdentifyItem = async (codigo: string) => {
     if (!codigo.trim() || isSearching) return;
@@ -68,8 +71,9 @@ export default function ScannerPage() {
     setItemInfo(null);
     setScanResult(codigo);
     setIsSearching(true); 
-    setManualCode(""); 
+    setManualCode("");
     setShowManualInput(false);
+    setKitQty("1");
 
     try {
       const { data, error: dbError } = await supabase
@@ -96,78 +100,77 @@ export default function ScannerPage() {
 
   const confirmarProducao = async () => {
     if (!itemInfo || !user) return;
+    const n = Math.min(9999, Math.max(1, Math.floor(Number(kitQty)) || 1));
+    if (n !== Number(kitQty)) {
+      setKitQty(String(n));
+    }
     setIsProcessing(true);
     try {
-      // 1. Buscar kit_items do kit com informações dos moldes
       const { data: kitItems, error: kitItemsError } = await supabase
-        .from('kit_items')
-        .select('molde_id, quantidade, moldes(nome, estoque_atual)')
-        .eq('kit_id', itemInfo.id);
+        .from("kit_items")
+        .select("molde_id, quantidade, moldes(nome, estoque_atual)")
+        .eq("kit_id", itemInfo.id);
 
       if (kitItemsError) throw kitItemsError;
 
-      // 2. Verificar estoque de cada molde
       const missingParts: string[] = [];
       if (kitItems && kitItems.length > 0) {
         for (const item of kitItems) {
           const molde = item.moldes as any;
-          const requiredQty = item.quantidade || 0;
+          const perKit = item.quantidade || 0;
+          const requiredQty = perKit * n;
           const availableQty = molde?.estoque_atual || 0;
 
           if (availableQty < requiredQty) {
             const missing = requiredQty - availableQty;
-            missingParts.push(`${molde?.nome || 'Peça desconhecida'}\nFaltam: ${missing} unidade(s)`);
+            missingParts.push(`${molde?.nome || "Peça desconhecida"}\nFaltam: ${missing} unidade(s) (${n} kit(s))`);
           }
         }
       }
 
-      // 3. Se faltar estoque, mostrar modal de erro
       if (missingParts.length > 0) {
         playError();
-        const errorMsg = `Não há peças avulsas suficientes para produzir este kit.\n\nFaltam:\n${missingParts.join('\n')}`;
+        const errorMsg = `Não há peças avulsas suficientes para produzir ${n} kit(s).\n\nFaltam:\n${missingParts.join("\n")}`;
         setValidationError(errorMsg);
         setIsProcessing(false);
         return;
       }
 
-      // 4. Se tiver estoque, descontar moldes e adicionar kit
-      // Descontar peças avulsas (moldes)
       if (kitItems && kitItems.length > 0) {
         for (const item of kitItems) {
           const molde = item.moldes as any;
-          const requiredQty = item.quantidade || 0;
+          const deduct = (item.quantidade || 0) * n;
           const currentStock = molde?.estoque_atual || 0;
-          const newStock = currentStock - requiredQty;
+          const newStock = currentStock - deduct;
 
           const { error: moldeError } = await supabase
-            .from('moldes')
+            .from("moldes")
             .update({ estoque_atual: newStock })
-            .eq('id', item.molde_id);
+            .eq("id", item.molde_id);
 
           if (moldeError) throw moldeError;
         }
       }
 
-      // Adicionar kit ao estoque
       const { error: updateError } = await supabase
-        .from('kits')
-        .update({ estoque_atual: itemInfo.qtd + 1 }) 
-        .eq('id', itemInfo.id);
+        .from("kits")
+        .update({ estoque_atual: itemInfo.qtd + n })
+        .eq("id", itemInfo.id);
       if (updateError) throw updateError;
 
-      // Registrar movimento de estoque
-      await supabase.from('stock_movements').insert({
+      await supabase.from("stock_movements").insert({
         kit_id: itemInfo.id,
         user_id: user.id,
-        type: 'IN', 
-        quantity: 1,
-        notes: 'Entrada via scanner'
+        type: "IN",
+        quantity: n,
+        notes: `Entrada via scanner (${n} kit(s))`,
       });
 
       playSuccess();
       setScanResult(null);
       setItemInfo(null);
-      showToast("Produção registrada! Peças avulsas descontadas.");
+      setKitQty("1");
+      showToast(`${n} kit(s) registrado(s)! Peças avulsas descontadas.`);
     } catch (err: any) {
       playError();
       showToast(`Erro: ${err.message}`, "error");
@@ -180,6 +183,7 @@ export default function ScannerPage() {
     setValidationError(null);
     setScanResult(null);
     setItemInfo(null);
+    setKitQty("1");
   };
 
   return (
@@ -264,10 +268,21 @@ export default function ScannerPage() {
                        <p className="text-green-600 font-bold text-lg mt-4 uppercase">Estoque: {itemInfo?.qtd} un</p>
                     </div>
                     <div className="space-y-3 pt-6 border-t">
+                       <div className="text-left space-y-2">
+                         <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Quantidade de kits</label>
+                         <input
+                           type="number"
+                           min={1}
+                           max={9999}
+                           value={kitQty}
+                           onChange={(e) => setKitQty(e.target.value)}
+                           className="w-full p-4 bg-gray-50 rounded-2xl font-black text-center text-lg outline-none border-2 border-transparent focus:border-[#5D286C]"
+                         />
+                       </div>
                        <button onClick={confirmarProducao} disabled={isProcessing} className="w-full bg-[#5D286C] text-white p-5 rounded-3xl font-black text-xl shadow-xl shadow-purple-100 transition-all active:scale-95">
                          {isProcessing ? <Loader2 className="animate-spin mx-auto" /> : "CONFIRMAR ENTRADA"}
                        </button>
-                       <button onClick={() => { setScanResult(null); setItemInfo(null); }} className="w-full text-gray-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
+                       <button type="button" onClick={() => { setScanResult(null); setItemInfo(null); setKitQty("1"); }} className="w-full text-gray-400 font-bold text-xs uppercase tracking-widest">Cancelar</button>
                     </div>
                   </>
                 )}

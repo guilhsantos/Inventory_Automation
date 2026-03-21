@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Plus, Database, Save, Calendar, Package, Edit, Trash2, X, Check, AlertTriangle } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
+import { todayYmdBr } from "@/lib/date-utils";
 
 export default function MaterialConfigPage() {
   const { showToast } = useToast();
@@ -28,7 +29,7 @@ export default function MaterialConfigPage() {
   // Estados para Entrada de Estoque
   const [selectedMatId, setSelectedMatId] = useState("");
   const [addQty, setAddQty] = useState("");
-  const [arrivalDate, setArrivalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [arrivalDate, setArrivalDate] = useState(todayYmdBr());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -142,7 +143,7 @@ export default function MaterialConfigPage() {
       showToast("Entrada de estoque salva!");
       setSelectedMatId("");
       setAddQty("");
-      setArrivalDate(new Date().toISOString().split('T')[0]);
+      setArrivalDate(todayYmdBr());
       fetchMaterials();
     } catch (err: any) {
       showToast("Erro ao salvar entrada: " + err.message, "error");

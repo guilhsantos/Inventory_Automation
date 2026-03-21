@@ -11,6 +11,51 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({ user: null, role: null, loading: true });
 
+const PROFILE_ROLE_KEY = "reauto-profile-role";
+const PROFILE_USER_KEY = "reauto-profile-user";
+
+function loadCachedRole(userId: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    if (sessionStorage.getItem(PROFILE_USER_KEY) === userId) {
+      return sessionStorage.getItem(PROFILE_ROLE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveCachedRole(userId: string, role: string) {
+  try {
+    sessionStorage.setItem(PROFILE_USER_KEY, userId);
+    sessionStorage.setItem(PROFILE_ROLE_KEY, role);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function fetchProfileRoleOnce(userId: string): Promise<"error" | string> {
+  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  if (error) {
+    if (error.code === "PGRST116") return "OP_ESTOQUE";
+    return "error";
+  }
+  return data?.role ?? "OP_ESTOQUE";
+}
+
+async function fetchProfileRoleWithRetry(userId: string, attempts = 4): Promise<string | null> {
+  for (let i = 0; i < attempts; i++) {
+    const r = await fetchProfileRoleOnce(userId);
+    if (r !== "error") {
+      saveCachedRole(userId, r);
+      return r;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400 * (i + 1)));
+  }
+  return loadCachedRole(userId);
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -34,23 +79,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (session?.user) {
       setUser(session.user);
       resetLogoutTimer();
-      
-      try {
-        // Timeout de 3 segundos para a query do profile
-        const profileTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Profile query timeout")), 3000)
-        );
 
-        const profilePromise = supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single();
-
-        const result = await Promise.race([profilePromise, profileTimeout]) as any;
-        setRole(result?.data?.role || 'OP_ESTOQUE');
-      } catch {
-        setRole('OP_ESTOQUE');
+      const resolved = await fetchProfileRoleWithRetry(session.user.id);
+      if (resolved) {
+        setRole(resolved);
+      } else {
+        const cached = loadCachedRole(session.user.id);
+        setRole(cached);
       }
     } else {
       setUser(null);
@@ -60,24 +95,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    // Timeout de segurança: força loading = false após 5 segundos
     authTimeoutRef.current = setTimeout(() => {
       console.warn("Auth initialization timeout - forcing loading false");
       setLoading(false);
-    }, 5000);
+    }, 12000);
 
     const initializeAuth = async () => {
       try {
-        // Timeout de 3 segundos para getSession
-        const sessionTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Session timeout")), 3000)
-        );
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.error("getSession:", error);
 
-        const sessionPromise = supabase.auth.getSession();
-        const result = await Promise.race([sessionPromise, sessionTimeout]) as any;
-        
-        if (result?.data?.session) {
-          await handleUserSession(result.data.session);
+        if (data?.session) {
+          await handleUserSession(data.session);
         } else {
           await handleUserSession(null);
         }
@@ -95,16 +124,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          await handleUserSession(session);
-        } else if (event === 'SIGNED_OUT') {
-          handleUserSession(null);
-        }
-        setLoading(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        await handleUserSession(session);
+      } else if (event === "SIGNED_OUT") {
+        await handleUserSession(null);
       }
-    );
+      setLoading(false);
+    });
 
     return () => {
       subscription.unsubscribe();
@@ -114,11 +143,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, role, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, role, loading }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

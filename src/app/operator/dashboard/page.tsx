@@ -38,55 +38,36 @@ export default function OperatorDashboardPage() {
   const audioNotification = useRef<HTMLAudioElement | null>(null);
   const previousOrdersRef = useRef<Set<number>>(new Set()); // Novo ref para guardar IDs anteriores
 
-  // Log para debug
+  // Som de novo pedido: use /public/new_order.mp3 ou /public/success.mp3 (opcional).
   useEffect(() => {
-    console.log("Dashboard mounted - authLoading:", authLoading, "user:", user, "loading:", loading);
-  }, [authLoading, user, loading]);
-
-  // Inicializar áudio uma vez
-  useEffect(() => {
-    audioNotification.current = new Audio('/new_order.mp3');
-    // Pré-carregar o áudio
-    audioNotification.current.preload = 'auto';
-    audioNotification.current.load();
-    
-    // Log para debug
-    audioNotification.current.addEventListener('loadeddata', () => {
-      console.log('Áudio carregado com sucesso');
-    });
-    
-    audioNotification.current.addEventListener('error', (e) => {
-      console.error('Erro ao carregar áudio:', e);
-    });
+    const trySrc = (src: string) => {
+      const a = new Audio(src);
+      a.preload = "auto";
+      a.addEventListener("error", () => {
+        if (src === "/new_order.mp3") {
+          trySrc("/success.mp3");
+        } else {
+          audioNotification.current = null;
+        }
+      });
+      a.addEventListener("loadeddata", () => {
+        audioNotification.current = a;
+      });
+      a.load();
+    };
+    trySrc("/new_order.mp3");
   }, []);
 
   const playNotification = useCallback(() => {
+    const a = audioNotification.current;
+    if (!a) return;
     try {
-      if (audioNotification.current) {
-        console.log('Tentando tocar notificação...');
-        // Resetar para o início e tocar
-        audioNotification.current.currentTime = 0;
-        audioNotification.current.play()
-          .then(() => {
-            console.log('Notificação tocada com sucesso');
-          })
-          .catch((err) => {
-            console.error("Erro ao tocar notificação:", err);
-            // Tentar criar uma nova instância se falhar
-            try {
-              const newAudio = new Audio('/success.mp3');
-              newAudio.play().catch((e) => {
-                console.error("Erro ao tocar nova instância:", e);
-              });
-            } catch (e) {
-              console.error("Erro ao criar nova instância de áudio:", e);
-            }
-          });
-      } else {
-        console.warn('audioNotification.current é null');
-      }
-    } catch (err) {
-      console.error("Erro ao criar áudio:", err);
+      a.currentTime = 0;
+      void a.play().catch(() => {
+        /* autoplay bloqueado ou arquivo ausente — ignorar */
+      });
+    } catch {
+      /* ignorar */
     }
   }, []);
 
@@ -96,11 +77,6 @@ export default function OperatorDashboardPage() {
       return;
     }
     
-    // Timeout de 5 segundos para a query
-    const queryTimeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Query timeout após 5 segundos")), 5000)
-    );
-
     try {
       setLoading(true);
       setError(null);
@@ -108,7 +84,7 @@ export default function OperatorDashboardPage() {
       // Guardar IDs anteriores do ref (não causa re-render)
       const previousOrderIds = previousOrdersRef.current;
       
-      const queryPromise = supabase
+      const { data, error: queryError } = await supabase
         .from("orders")
         .select("id, codigo_unico, cliente, data_entrega, is_priority, priority_position, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
         .eq("status", "Pendente")
@@ -116,11 +92,7 @@ export default function OperatorDashboardPage() {
         .order("priority_position", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: true });
 
-      const result = await Promise.race([queryPromise, queryTimeout]) as any;
-      const { data, error: queryError } = result;
-
       if (queryError) {
-        console.error("Error fetching orders:", queryError);
         setError(queryError.message);
         setOrders([]);
         setLoading(false);
@@ -164,7 +136,6 @@ export default function OperatorDashboardPage() {
         setOrders([]);
       }
     } catch (err: any) {
-      console.error("Unexpected error:", err);
       setError(err?.message || "Erro ao carregar pedidos");
       setOrders([]);
     } finally {

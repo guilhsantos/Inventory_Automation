@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from "lucide-react";
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
 
-export default function OrderDetailsPage() {
+const RETURN_STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
+
+function OrderDetailsInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orderId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
+
+  const returnStatus = searchParams.get("returnStatus");
+  const listHref =
+    returnStatus && RETURN_STATUSES.includes(returnStatus as (typeof RETURN_STATUSES)[number])
+      ? `/orders/list?status=${encodeURIComponent(returnStatus)}`
+      : "/orders/list";
 
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,9 +35,7 @@ export default function OrderDetailsPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("orders")
-      .select(
-        "*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico))"
-      )
+      .select("*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico))")
       .eq("id", orderId)
       .single();
 
@@ -39,6 +46,10 @@ export default function OrderDetailsPage() {
       setOrder(data);
     }
     setLoading(false);
+  }
+
+  function goBack() {
+    router.push(listHref);
   }
 
   if (loading) {
@@ -53,7 +64,8 @@ export default function OrderDetailsPage() {
     return (
       <div className="max-w-3xl mx-auto p-4 space-y-4">
         <button
-          onClick={() => router.back()}
+          type="button"
+          onClick={goBack}
           className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-[#5D286C]"
         >
           <ArrowLeft size={18} /> Voltar
@@ -69,18 +81,15 @@ export default function OrderDetailsPage() {
     <div className="max-w-4xl mx-auto p-4 space-y-6">
       <div className="flex items-center gap-4">
         <button
-          onClick={() => router.back()}
+          type="button"
+          onClick={goBack}
           className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-[#5D286C] shadow-sm transition-all"
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl md:text-3xl font-black text-[#262626] flex items-center gap-2">
-            Detalhes do Pedido
-          </h1>
-          <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">
-            #{order.codigo_unico}
-          </p>
+          <h1 className="text-2xl md:text-3xl font-black text-[#262626] flex items-center gap-2">Detalhes do Pedido</h1>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">#{order.codigo_unico}</p>
         </div>
       </div>
 
@@ -88,9 +97,7 @@ export default function OrderDetailsPage() {
         <div className="space-y-4">
           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-black px-3 py-1 rounded-full bg-gray-100 text-gray-600 uppercase">
-                {order.status}
-              </span>
+              <span className="text-xs font-black px-3 py-1 rounded-full bg-gray-100 text-gray-600 uppercase">{order.status}</span>
               {order.is_priority && (
                 <span className="text-[10px] font-black px-2 py-1 rounded-full bg-red-100 text-red-600 uppercase flex items-center gap-1">
                   <Star size={12} /> Prioritário
@@ -101,10 +108,8 @@ export default function OrderDetailsPage() {
               <User size={16} className="text-gray-400" /> {order.cliente}
             </p>
             <p className="flex items-center gap-2 text-sm font-bold text-gray-500">
-              <Calendar size={16} className="text-gray-400" />{" "}
-              {order.data_entrega
-                ? formatDate(order.data_entrega)
-                : "Sem data definida"}
+              <Calendar size={16} className="text-gray-400" />
+              {order.data_entrega ? formatDate(order.data_entrega) : "Sem data definida"}
             </p>
             {order.invoice_number && (
               <p className="text-xs font-bold text-gray-500">
@@ -125,24 +130,17 @@ export default function OrderDetailsPage() {
             </h2>
             <div className="space-y-3">
               {(order.order_items || []).map((item: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="flex justify-between items-center bg-gray-50 rounded-2xl px-4 py-3"
-                >
+                <div key={idx} className="flex justify-between items-center bg-gray-50 rounded-2xl px-4 py-3">
                   <div className="flex flex-col">
                     <span className="text-xs font-black text-gray-700">
                       {item.kits?.codigo_unico} - {item.kits?.nome_kit}
                     </span>
                   </div>
-                  <span className="text-xs font-black text-[#5D286C]">
-                    {item.quantidade} un.
-                  </span>
+                  <span className="text-xs font-black text-[#5D286C]">{item.quantidade} un.</span>
                 </div>
               ))}
               {(!order.order_items || order.order_items.length === 0) && (
-                <p className="text-center text-gray-400 text-sm font-bold">
-                  Nenhum item encontrado para este pedido.
-                </p>
+                <p className="text-center text-gray-400 text-sm font-bold">Nenhum item encontrado para este pedido.</p>
               )}
             </div>
           </div>
@@ -150,12 +148,10 @@ export default function OrderDetailsPage() {
 
         <div className="space-y-4">
           <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-            <h2 className="text-sm font-black text-[#262626] mb-3 uppercase tracking-widest">
-              Foto do Pedido
-            </h2>
+            <h2 className="text-sm font-black text-[#262626] mb-3 uppercase tracking-widest">Foto do Pedido</h2>
             {hasPhoto ? (
-              <div 
-                className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 group cursor-pointer" 
+              <div
+                className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gray-50 group cursor-pointer"
                 onClick={() => setIsPhotoModalOpen(true)}
               >
                 <img
@@ -174,23 +170,20 @@ export default function OrderDetailsPage() {
             )}
           </div>
 
-          <Link
-            href="/orders/list"
-            className="block text-center text-xs font-black text-gray-500 hover:text-[#5D286C]"
-          >
+          <Link href={listHref} className="block text-center text-xs font-black text-gray-500 hover:text-[#5D286C]">
             Ver todos os pedidos
           </Link>
         </div>
       </div>
 
-      {/* Modal de Foto em Tamanho Completo */}
       {isPhotoModalOpen && hasPhoto && (
-        <div 
+        <div
           className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setIsPhotoModalOpen(false)}
         >
           <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
-            <button 
+            <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setIsPhotoModalOpen(false);
@@ -212,4 +205,16 @@ export default function OrderDetailsPage() {
   );
 }
 
-
+export default function OrderDetailsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+        </div>
+      }
+    >
+      <OrderDetailsInner />
+    </Suspense>
+  );
+}
