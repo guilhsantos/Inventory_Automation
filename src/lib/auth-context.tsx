@@ -76,18 +76,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, 3600000);
   };
 
-  const handleUserSession = async (session: Session | null) => {
+  const handleUserSession = (session: Session | null) => {
     if (session?.user) {
       setUser(session.user);
       resetLogoutTimer();
 
-      const resolved = await fetchProfileRoleWithRetry(session.user.id);
-      if (resolved) {
-        setRole(resolved);
-      } else {
-        const cached = loadCachedRole(session.user.id);
-        setRole(cached);
-      }
+      // Aplica cache imediatamente para evitar flash de role errado
+      const cached = loadCachedRole(session.user.id);
+      if (cached) setRole(cached);
+
+      // Busca role atualizado em background sem bloquear o authLoading
+      fetchProfileRoleWithRetry(session.user.id).then((resolved) => {
+        if (resolved) {
+          setRole(resolved);
+        } else if (!cached) {
+          setRole(null);
+        }
+      });
     } else {
       setUser(null);
       setRole(null);
@@ -118,27 +123,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (
-          event === "INITIAL_SESSION" ||
-          event === "SIGNED_IN" ||
-          event === "TOKEN_REFRESHED"
-        ) {
-          await handleUserSession(session);
-        } else if (event === "SIGNED_OUT") {
-          await handleUserSession(null);
-        }
-      } finally {
-        if (!authInitFinishedRef.current) {
-          authInitFinishedRef.current = true;
-          if (authTimeoutRef.current) {
-            clearTimeout(authTimeoutRef.current);
-            authTimeoutRef.current = null;
-          }
-        }
-        setLoading(false);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event === "INITIAL_SESSION" ||
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED"
+      ) {
+        handleUserSession(session);
+      } else if (event === "SIGNED_OUT") {
+        handleUserSession(null);
       }
+
+      if (!authInitFinishedRef.current) {
+        authInitFinishedRef.current = true;
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current);
+          authTimeoutRef.current = null;
+        }
+      }
+      setLoading(false);
     });
 
     return () => {
