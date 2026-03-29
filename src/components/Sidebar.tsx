@@ -42,7 +42,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
   // Re-verificar role periodicamente para garantir que está atualizado
   useEffect(() => {
     if (!user) return;
-    
+
     const checkRole = async () => {
       try {
         const { data, error } = await supabase
@@ -60,16 +60,16 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
         setCurrentRole("OP_ESTOQUE");
       }
     };
-    
-    // Verificar imediatamente se não tiver role
-    if (!currentRole && user) {
+
+    // Verificar imediatamente apenas se o contexto não tiver role
+    if (!contextRole) {
       checkRole();
     }
-    
+
     const interval = setInterval(checkRole, 30000); // Verificar a cada 30s
-    
+
     return () => clearInterval(interval);
-  }, [user, currentRole, contextRole]);
+  }, [user, contextRole]);
 
   const handleLogout = () => {
     if (isLoggingOut) return;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, Loader2, ArrowRight } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -11,6 +12,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { user, role, loading: authLoading } = useAuth();
+
+  // Redirecionar usuário já autenticado
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (role === "OP_ESTOQUE" || role === "OP_PRODUCAO") {
+      router.replace("/operator/dashboard");
+    } else {
+      router.replace("/dashboard");
+    }
+  }, [user, role, authLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -116,41 +116,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     }, 12000);
 
-    const initializeAuth = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) console.error("getSession:", error);
-
-        if (data?.session) {
-          await handleUserSession(data.session);
-        } else {
-          await handleUserSession(null);
-        }
-      } catch (err) {
-        console.error("Auth initialization error:", err);
-        await handleUserSession(null);
-      } finally {
-        authInitFinishedRef.current = true;
-        if (authTimeoutRef.current) {
-          clearTimeout(authTimeoutRef.current);
-          authTimeoutRef.current = null;
-        }
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
-        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (
+          event === "INITIAL_SESSION" ||
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED"
+        ) {
           await handleUserSession(session);
         } else if (event === "SIGNED_OUT") {
           await handleUserSession(null);
         }
       } finally {
+        if (!authInitFinishedRef.current) {
+          authInitFinishedRef.current = true;
+          if (authTimeoutRef.current) {
+            clearTimeout(authTimeoutRef.current);
+            authTimeoutRef.current = null;
+          }
+        }
         setLoading(false);
       }
     });
