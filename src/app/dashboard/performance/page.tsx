@@ -25,7 +25,10 @@ type OrderRow = {
   id: number;
   codigo_unico: string;
   cliente: string;
-  data_entrega: string | null;
+  status: string;
+  created_at: string | null;
+  concluido_em: string | null;
+  entregue_em: string | null;
   totalKits: number;
   sortKey: number;
   order_items: { kit_id: number; nome: string; quantidade: number }[];
@@ -122,7 +125,7 @@ export default function PerformancePage() {
 
         let q = supabase
           .from("orders")
-          .select("id, codigo_unico, cliente, status, data_entrega, order_items(quantidade, kit_id, kits(nome_kit))")
+          .select("id, codigo_unico, cliente, status, created_at, concluido_em, entregue_em, order_items(quantidade, kit_id, kits(nome_kit))")
           .gte(dateCol, startIso)
           .lte(dateCol, endIso);
 
@@ -156,7 +159,10 @@ export default function PerformancePage() {
             id: o.id,
             codigo_unico: o.codigo_unico,
             cliente: o.cliente,
-            data_entrega: o.data_entrega,
+            status: o.status,
+            created_at: o.created_at || null,
+            concluido_em: o.concluido_em || null,
+            entregue_em: o.entregue_em || null,
             totalKits,
             sortKey: new Date(o.created_at || 0).getTime(),
             order_items: (o.order_items || []).map((item: any) => ({
@@ -478,7 +484,8 @@ export default function PerformancePage() {
             type="button"
             onClick={() => {
               setTableMode("pedidos");
-              void runFetch({ rangeStart: draftStart, rangeEnd: draftEnd, mode: "pedidos", rowFilter: draftRowFilter, machineId: draftMachineId, orderStatus: draftOrderStatus });
+              setDraftOrderStatus("Todos");
+              void runFetch({ rangeStart: draftStart, rangeEnd: draftEnd, mode: "pedidos", rowFilter: draftRowFilter, machineId: draftMachineId, orderStatus: "Todos" });
             }}
             className={`px-4 py-2 rounded-2xl transition-all flex items-center gap-2 ${
               tableMode === "pedidos" ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
@@ -728,27 +735,41 @@ export default function PerformancePage() {
                   <th className="p-3">Pedido</th>
                   <th className="p-3">Cliente</th>
                   <th className="p-3">Total Kits</th>
-                  <th className="p-3">Data Entrega</th>
+                  <th className="p-3">Data Criado</th>
+                  <th className="p-3">Data Concluído</th>
+                  <th className="p-3">Data Entregue</th>
+                  <th className="p-3">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedOrderRows.map((row, i) => (
+                {sortedOrderRows.map((row, i) => {
+                  const rowColor =
+                    row.status === "Pendente" ? "bg-orange-50/80 text-orange-900" :
+                    row.status === "Concluído" ? "bg-blue-50/80 text-blue-900" :
+                    row.status === "Entregue" ? "bg-emerald-50/80 text-emerald-900" :
+                    "bg-white";
+                  const showConcluido = row.status === "Concluído" || row.status === "Entregue";
+                  const showEntregue = row.status === "Entregue";
+                  return (
                   <Fragment key={row.id}>
                     <tr
                       onClick={() => setExpandedOrderId(expandedOrderId === row.id ? null : row.id)}
-                      className="border-b border-gray-50 font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                      className={`border-b border-gray-100 font-bold cursor-pointer transition-colors hover:brightness-95 ${rowColor}`}
                     >
-                      <td className="p-3 text-gray-400">{i + 1}</td>
-                      <td className="p-3 text-[#5D286C] font-black">{row.codigo_unico}</td>
-                      <td className="p-3 text-gray-700">{row.cliente}</td>
-                      <td className="p-3 text-gray-700">{row.totalKits}</td>
-                      <td className="p-3 text-gray-500 whitespace-nowrap">
-                        {row.data_entrega ? formatDate(row.data_entrega) : "—"}
+                      <td className="p-3 opacity-60">{i + 1}</td>
+                      <td className="p-3 font-black">{row.codigo_unico}</td>
+                      <td className="p-3">{row.cliente}</td>
+                      <td className="p-3">{row.totalKits}</td>
+                      <td className="p-3 whitespace-nowrap">{row.created_at ? formatDate(row.created_at) : "—"}</td>
+                      <td className="p-3 whitespace-nowrap">{showConcluido && row.concluido_em ? formatDate(row.concluido_em) : "—"}</td>
+                      <td className="p-3 whitespace-nowrap">{showEntregue && row.entregue_em ? formatDate(row.entregue_em) : "—"}</td>
+                      <td className="p-3">
+                        <span className="text-[10px] font-black px-2 py-1 rounded-full bg-black/10 uppercase">{row.status}</span>
                       </td>
                     </tr>
                     {expandedOrderId === row.id && (
                       <tr key={`${row.id}-expand`}>
-                        <td colSpan={5} className="px-4 pb-4 bg-purple-50/50">
+                        <td colSpan={8} className="px-4 pb-4 bg-white/60">
                           <div className="rounded-2xl border border-purple-100 p-4 space-y-2">
                             {row.order_items.map((item) => (
                               <div key={item.kit_id} className="flex justify-between text-sm font-bold">
@@ -764,7 +785,8 @@ export default function PerformancePage() {
                       </tr>
                     )}
                   </Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {!loading && sortedOrderRows.length === 0 && (
@@ -799,14 +821,11 @@ export default function PerformancePage() {
                 <div
                   key={item.kitId}
                   className={`flex items-center gap-3 p-3 rounded-2xl ${
-                    i === 0 ? "bg-amber-50 border border-amber-200" :
-                    i === 1 ? "bg-slate-200 border border-slate-300" :
-                    i === 2 ? "bg-orange-50 border border-orange-200" :
-                    "bg-white border border-gray-100"
+                    i === 0 ? "bg-amber-50 border border-amber-200" : "bg-white border border-gray-100"
                   }`}
                 >
                   <span className={`text-lg font-black w-8 text-center ${
-                    i === 0 ? "text-amber-500" : i === 1 ? "text-slate-500" : i === 2 ? "text-orange-500" : "text-gray-300"
+                    i === 0 ? "text-amber-500" : "text-gray-300"
                   }`}>
                     {i + 1}
                   </span>
