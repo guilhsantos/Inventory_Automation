@@ -16,11 +16,15 @@ function OrderDetailsInner() {
   const searchParams = useSearchParams();
   const orderId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
 
+  const returnUrl = searchParams.get("returnUrl");
   const returnStatus = searchParams.get("returnStatus");
-  const listHref =
-    returnStatus && RETURN_STATUSES.includes(returnStatus as (typeof RETURN_STATUSES)[number])
-      ? `/orders/list?status=${encodeURIComponent(returnStatus)}`
-      : "/orders/list";
+
+  const safeReturnUrl = returnUrl?.startsWith("/") ? returnUrl : null;
+  const listHref = safeReturnUrl
+    ? safeReturnUrl
+    : returnStatus && RETURN_STATUSES.includes(returnStatus as (typeof RETURN_STATUSES)[number])
+    ? `/orders/list?status=${encodeURIComponent(returnStatus)}`
+    : "/orders/list";
 
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);

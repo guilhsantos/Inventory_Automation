@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Activity, Calendar, Download, Package, ArrowDown, ArrowUp, Cpu } from "lucide-react";
+import { Loader2, Activity, Calendar, Download, Package, ArrowDown, ArrowUp, Cpu, ShoppingCart, X, Trophy } from "lucide-react";
 import { brDayRangeIso, formatDate, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
+import Link from "next/link";
 
 const KG_POR_SACO = 25;
 
@@ -21,8 +22,24 @@ type TableRow = {
   machineId: number | null;
 };
 
+type OrderRow = {
+  id: number;
+  codigo_unico: string;
+  cliente: string;
+  data_entrega: string | null;
+  totalKits: number;
+  sortKey: number;
+};
+
+type KitRankItem = {
+  kitId: number;
+  nome: string;
+  total: number;
+};
+
 type RowFilter = "todos" | "defeitos" | "prod_maquina";
-type TableMode = "molde" | "kit";
+type TableMode = "molde" | "kit" | "pedidos";
+type OrderStatus = "Pendente" | "Concluído" | "Entregue";
 
 type FetchParams = {
   rangeStart: string;
@@ -30,6 +47,7 @@ type FetchParams = {
   mode: TableMode;
   rowFilter: RowFilter;
   machineId: string;
+  orderStatus: OrderStatus;
 };
 
 export default function PerformancePage() {
@@ -40,8 +58,12 @@ export default function PerformancePage() {
   const [tableMode, setTableMode] = useState<TableMode>("molde");
   const [draftRowFilter, setDraftRowFilter] = useState<RowFilter>("todos");
   const [draftMachineId, setDraftMachineId] = useState("");
+  const [draftOrderStatus, setDraftOrderStatus] = useState<OrderStatus>("Concluído");
   const [machines, setMachines] = useState<{ id: number; nome: string }[]>([]);
   const [tableRows, setTableRows] = useState<TableRow[]>([]);
+  const [orderRows, setOrderRows] = useState<OrderRow[]>([]);
+  const [kitRanking, setKitRanking] = useState<KitRankItem[]>([]);
+  const [kitRankOpen, setKitRankOpen] = useState(false);
   const [sortDesc, setSortDesc] = useState(true);
   const [cards, setCards] = useState({
     totalProduzido: 0,
@@ -51,6 +73,8 @@ export default function PerformancePage() {
     totalKits: 0,
     mediaMaterialKit: 0,
     mediaKitsDia: 0,
+    totalPedidos: 0,
+    totalKitsPedidos: 0,
   });
   const [exportRange, setExportRange] = useState({ start: "", end: "" });
 
@@ -72,6 +96,7 @@ export default function PerformancePage() {
       mode: "molde",
       rowFilter: "todos",
       machineId: "",
+      orderStatus: "Concluído",
     }).then(() => {
       setInitialDone(true);
     });
@@ -87,6 +112,64 @@ export default function PerformancePage() {
         params.rowFilter === "prod_maquina" && params.machineId
           ? parseInt(params.machineId, 10)
           : null;
+
+      if (params.mode === "pedidos") {
+        // Coluna de data conforme status
+        const dateCol =
+          params.orderStatus === "Concluído" ? "concluido_em" :
+          params.orderStatus === "Entregue"  ? "entregue_em"  : "created_at";
+
+        const { data: ordersRaw } = await supabase
+          .from("orders")
+          .select("id, codigo_unico, cliente, status, data_entrega, order_items(quantidade, kit_id, kits(nome_kit))")
+          .eq("status", params.orderStatus)
+          .gte(dateCol, startIso)
+          .lte(dateCol, endIso);
+
+        const orders = ordersRaw || [];
+
+        // Montar linhas e agregações
+        let totalKitsPedidos = 0;
+        const kitMap = new Map<number, { nome: string; total: number }>();
+        const rows: OrderRow[] = orders.map((o: any) => {
+          const totalKits = (o.order_items || []).reduce(
+            (acc: number, item: any) => acc + (item.quantidade || 0),
+            0
+          );
+          totalKitsPedidos += totalKits;
+
+          (o.order_items || []).forEach((item: any) => {
+            const kitId = item.kit_id as number;
+            const nome = item.kits?.nome_kit || `Kit #${kitId}`;
+            const prev = kitMap.get(kitId) || { nome, total: 0 };
+            prev.total += item.quantidade || 0;
+            kitMap.set(kitId, prev);
+          });
+
+          return {
+            id: o.id,
+            codigo_unico: o.codigo_unico,
+            cliente: o.cliente,
+            data_entrega: o.data_entrega,
+            totalKits,
+            sortKey: new Date(o.created_at || 0).getTime(),
+          };
+        });
+
+        const ranking: KitRankItem[] = Array.from(kitMap.entries())
+          .map(([kitId, { nome, total }]) => ({ kitId, nome, total }))
+          .sort((a, b) => b.total - a.total);
+
+        setOrderRows(rows);
+        setKitRanking(ranking);
+        setCards((prev) => ({
+          ...prev,
+          totalPedidos: orders.length,
+          totalKitsPedidos,
+        }));
+        setTableRows([]);
+        return;
+      }
 
       const kitItemsRes = await supabase.from("kit_items").select("kit_id, molde_id, quantidade");
       const kitItems = kitItemsRes.data || [];
@@ -197,7 +280,8 @@ export default function PerformancePage() {
       const diasComKit = kitDays.size || 1;
 
       if (params.mode === "molde") {
-        setCards({
+        setCards((prev) => ({
+          ...prev,
           totalProduzido: sumPiecesProd,
           totalDefeito,
           mediaMaterialPeca: sumPiecesProd > 0 ? sumKgProd / sumPiecesProd : 0,
@@ -205,9 +289,10 @@ export default function PerformancePage() {
           totalKits: 0,
           mediaMaterialKit: 0,
           mediaKitsDia: 0,
-        });
+        }));
       } else {
-        setCards({
+        setCards((prev) => ({
+          ...prev,
           totalProduzido: 0,
           totalDefeito: 0,
           mediaMaterialPeca: 0,
@@ -215,7 +300,7 @@ export default function PerformancePage() {
           totalKits,
           mediaMaterialKit: totalKits > 0 ? sumKgKits / totalKits : 0,
           mediaKitsDia: diasComKit > 0 ? totalKits / diasComKit : 0,
-        });
+        }));
       }
 
       const rows: TableRow[] = [];
@@ -279,6 +364,8 @@ export default function PerformancePage() {
 
       rows.sort((a, b) => b.sortKey - a.sortKey);
       setTableRows(rows);
+      setOrderRows([]);
+      setKitRanking([]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -293,6 +380,7 @@ export default function PerformancePage() {
       mode: tableMode,
       rowFilter: draftRowFilter,
       machineId: draftMachineId,
+      orderStatus: draftOrderStatus,
     });
   }
 
@@ -301,6 +389,10 @@ export default function PerformancePage() {
     copy.sort((a, b) => (sortDesc ? b.sortKey - a.sortKey : a.sortKey - b.sortKey));
     return copy;
   }, [tableRows, sortDesc]);
+
+  const sortedOrderRows = useMemo(() => {
+    return [...orderRows].sort((a, b) => sortDesc ? b.sortKey - a.sortKey : a.sortKey - b.sortKey);
+  }, [orderRows, sortDesc]);
 
   const exportExcel = async () => {
     const XLSX = await import("xlsx");
@@ -323,13 +415,15 @@ export default function PerformancePage() {
     XLSX.writeFile(wb, `producao_${a}_${b}.xlsx`);
   };
 
+  const topKit = kitRanking[0] ?? null;
+
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-8 space-y-8 bg-gray-50/50 min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-4xl font-black text-[#262626] tracking-tight">Performance</h1>
           <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">
-            Molde (peças + defeitos) ou Kit — use Filtrar para carregar
+            Molde (peças + defeitos), Kit ou Pedidos — use Filtrar para carregar
           </p>
         </div>
         <button
@@ -343,6 +437,7 @@ export default function PerformancePage() {
       </div>
 
       <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
+        {/* Tabs */}
         <div className="flex flex-wrap gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase w-fit">
           <button
             type="button"
@@ -361,6 +456,15 @@ export default function PerformancePage() {
             }`}
           >
             <Package size={16} /> Kit
+          </button>
+          <button
+            type="button"
+            onClick={() => setTableMode("pedidos")}
+            className={`px-4 py-2 rounded-2xl transition-all flex items-center gap-2 ${
+              tableMode === "pedidos" ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
+            }`}
+          >
+            <ShoppingCart size={16} /> Pedidos
           </button>
         </div>
 
@@ -426,6 +530,21 @@ export default function PerformancePage() {
             </div>
           )}
 
+          {tableMode === "pedidos" && (
+            <div>
+              <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Status</label>
+              <select
+                value={draftOrderStatus}
+                onChange={(e) => setDraftOrderStatus(e.target.value as OrderStatus)}
+                className="px-3 py-2 rounded-2xl border-2 border-gray-100 font-bold text-sm min-w-[180px]"
+              >
+                <option value="Pendente">Pendente</option>
+                <option value="Concluído">Concluído</option>
+                <option value="Entregue">Entregue</option>
+              </select>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -435,17 +554,20 @@ export default function PerformancePage() {
             >
               {loading ? <Loader2 className="animate-spin inline" size={16} /> : "FILTRAR"}
             </button>
-            <button
-              type="button"
-              onClick={exportExcel}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-2xl text-xs font-black hover:bg-emerald-700 transition-colors"
-            >
-              <Download size={16} /> Exportar Excel
-            </button>
+            {tableMode !== "pedidos" && (
+              <button
+                type="button"
+                onClick={exportExcel}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-2xl text-xs font-black hover:bg-emerald-700 transition-colors"
+              >
+                <Download size={16} /> Exportar Excel
+              </button>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Cards */}
       {tableMode === "molde" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <MiniCard title="Total produzido (peças)" value={cards.totalProduzido} />
@@ -453,11 +575,39 @@ export default function PerformancePage() {
           <MiniCard title="Média material / peça (kg)" value={cards.mediaMaterialPeca.toFixed(2)} />
           <MiniCard title="Média material / dia (kg)" value={cards.mediaMaterialDia.toFixed(2)} />
         </div>
-      ) : (
+      ) : tableMode === "kit" ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <MiniCard title="Total kits produzidos" value={cards.totalKits} icon={<Package className="text-[#5D286C]" />} />
           <MiniCard title="Média material / kit (kg)" value={cards.mediaMaterialKit.toFixed(2)} />
           <MiniCard title="Média kits / dia" value={cards.mediaKitsDia.toFixed(2)} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <MiniCard title="Total pedidos" value={cards.totalPedidos} icon={<ShoppingCart className="text-[#5D286C]" />} />
+          <MiniCard title="Total kits nos pedidos" value={cards.totalKitsPedidos} icon={<Package className="text-[#5D286C]" />} />
+          {/* Card do kit mais produzido — clicável */}
+          <div
+            className={`bg-white p-6 rounded-[2rem] shadow-sm border-2 flex items-center gap-4 transition-all ${
+              topKit ? "border-[#5D286C] cursor-pointer hover:shadow-md" : "border-gray-100"
+            }`}
+            onClick={() => topKit && setKitRankOpen(true)}
+            title={topKit ? "Clique para ver o ranking completo" : ""}
+          >
+            <div className="p-3 bg-amber-50 rounded-xl shrink-0">
+              <Trophy className="text-amber-500" size={24} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">Kit mais pedido</p>
+              {topKit ? (
+                <>
+                  <p className="text-base font-black text-[#262626] truncate">{topKit.nome}</p>
+                  <p className="text-xs font-bold text-[#5D286C]">{topKit.total} unidades · Ver ranking →</p>
+                </>
+              ) : (
+                <p className="text-xl font-black text-gray-300">—</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -467,66 +617,174 @@ export default function PerformancePage() {
         </p>
       )}
 
-      <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden min-h-[200px] relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-20 rounded-[2.5rem]">
-            <Loader2 className="animate-spin text-[#5D286C]" size={40} />
-          </div>
-        )}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-          <h2 className="text-lg font-black text-[#262626]">
-            {tableMode === "molde" ? "Produção e defeito" : "Entradas de kit"}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setSortDesc((v) => !v)}
-            className="flex items-center gap-2 text-xs font-black text-[#5D286C] uppercase bg-purple-50 px-4 py-2 rounded-2xl hover:bg-purple-100"
-          >
-            Data {sortDesc ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
-          </button>
-        </div>
-        <div className="overflow-x-auto rounded-2xl border border-gray-100 max-h-[min(70vh,720px)] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50 z-10">
-              <tr className="text-left text-[10px] font-black uppercase text-gray-400 border-b border-gray-100">
-                <th className="p-3">#</th>
-                <th className="p-3">Molde / Kit</th>
-                <th className="p-3">Máquina</th>
-                <th className="p-3">Material</th>
-                <th className="p-3">Data</th>
-                <th className="p-3">Qtd</th>
-                <th className="p-3">Kg</th>
-                <th className="p-3">Obs.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row, i) => {
-                const green = row.kind === "producao" || row.kind === "kit";
-                return (
-                  <tr
-                    key={`${row.kind}-${row.sortKey}-${i}`}
-                    className={`border-b border-gray-50 font-bold ${
-                      green ? "bg-emerald-50/80 text-emerald-900" : "bg-red-50/80 text-red-900"
-                    }`}
-                  >
-                    <td className="p-3">{i + 1}</td>
-                    <td className="p-3">{row.molde}</td>
-                    <td className="p-3">{row.maquina}</td>
-                    <td className="p-3">{row.material}</td>
-                    <td className="p-3 whitespace-nowrap">{formatDate(row.dataRaw)}</td>
-                    <td className="p-3">{row.qtd}</td>
-                    <td className="p-3">{row.kg > 0 ? row.kg.toFixed(2) : "—"}</td>
-                    <td className="p-3 max-w-[200px]">{row.obs}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {!loading && sortedRows.length === 0 && (
-            <p className="text-center text-gray-400 font-bold py-12">Nenhum registro. Ajuste filtros e clique em Filtrar.</p>
+      {/* Tabela Molde/Kit */}
+      {tableMode !== "pedidos" && (
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden min-h-[200px] relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-20 rounded-[2.5rem]">
+              <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+            </div>
           )}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <h2 className="text-lg font-black text-[#262626]">
+              {tableMode === "molde" ? "Produção e defeito" : "Entradas de kit"}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setSortDesc((v) => !v)}
+              className="flex items-center gap-2 text-xs font-black text-[#5D286C] uppercase bg-purple-50 px-4 py-2 rounded-2xl hover:bg-purple-100"
+            >
+              Data {sortDesc ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+            </button>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-gray-100 max-h-[min(70vh,720px)] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50 z-10">
+                <tr className="text-left text-[10px] font-black uppercase text-gray-400 border-b border-gray-100">
+                  <th className="p-3">#</th>
+                  <th className="p-3">Molde / Kit</th>
+                  <th className="p-3">Máquina</th>
+                  <th className="p-3">Material</th>
+                  <th className="p-3">Data</th>
+                  <th className="p-3">Qtd</th>
+                  <th className="p-3">Kg</th>
+                  <th className="p-3">Obs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((row, i) => {
+                  const green = row.kind === "producao" || row.kind === "kit";
+                  return (
+                    <tr
+                      key={`${row.kind}-${row.sortKey}-${i}`}
+                      className={`border-b border-gray-50 font-bold ${
+                        green ? "bg-emerald-50/80 text-emerald-900" : "bg-red-50/80 text-red-900"
+                      }`}
+                    >
+                      <td className="p-3">{i + 1}</td>
+                      <td className="p-3">{row.molde}</td>
+                      <td className="p-3">{row.maquina}</td>
+                      <td className="p-3">{row.material}</td>
+                      <td className="p-3 whitespace-nowrap">{formatDate(row.dataRaw)}</td>
+                      <td className="p-3">{row.qtd}</td>
+                      <td className="p-3">{row.kg > 0 ? row.kg.toFixed(2) : "—"}</td>
+                      <td className="p-3 max-w-[200px]">{row.obs}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!loading && sortedRows.length === 0 && (
+              <p className="text-center text-gray-400 font-bold py-12">Nenhum registro. Ajuste filtros e clique em Filtrar.</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Tabela Pedidos */}
+      {tableMode === "pedidos" && (
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden min-h-[200px] relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-20 rounded-[2.5rem]">
+              <Loader2 className="animate-spin text-[#5D286C]" size={40} />
+            </div>
+          )}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+            <h2 className="text-lg font-black text-[#262626]">Pedidos</h2>
+            <button
+              type="button"
+              onClick={() => setSortDesc((v) => !v)}
+              className="flex items-center gap-2 text-xs font-black text-[#5D286C] uppercase bg-purple-50 px-4 py-2 rounded-2xl hover:bg-purple-100"
+            >
+              Data {sortDesc ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+            </button>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-gray-100 max-h-[min(70vh,720px)] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50 z-10">
+                <tr className="text-left text-[10px] font-black uppercase text-gray-400 border-b border-gray-100">
+                  <th className="p-3">#</th>
+                  <th className="p-3">Pedido</th>
+                  <th className="p-3">Cliente</th>
+                  <th className="p-3">Total Kits</th>
+                  <th className="p-3">Data Entrega</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedOrderRows.map((row, i) => (
+                  <tr key={row.id} className="border-b border-gray-50 font-bold hover:bg-gray-50 transition-colors">
+                    <td className="p-3 text-gray-400">{i + 1}</td>
+                    <td className="p-3">
+                      <Link
+                        href={`/orders/${row.id}?returnStatus=${encodeURIComponent(draftOrderStatus)}`}
+                        className="text-[#5D286C] font-black hover:underline"
+                      >
+                        {row.codigo_unico}
+                      </Link>
+                    </td>
+                    <td className="p-3 text-gray-700">{row.cliente}</td>
+                    <td className="p-3 text-gray-700">{row.totalKits}</td>
+                    <td className="p-3 text-gray-500 whitespace-nowrap">
+                      {row.data_entrega ? formatDate(row.data_entrega) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!loading && sortedOrderRows.length === 0 && (
+              <p className="text-center text-gray-400 font-bold py-12">Nenhum pedido encontrado. Ajuste filtros e clique em Filtrar.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Popup ranking de kits */}
+      {kitRankOpen && (
+        <div
+          className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setKitRankOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md p-6 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setKitRankOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-xl font-black text-[#262626] mb-1 flex items-center gap-2">
+              <Trophy className="text-amber-500" size={20} /> Ranking de Kits
+            </h2>
+            <p className="text-xs font-bold text-gray-400 uppercase mb-4">Total pedido no período filtrado</p>
+            <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+              {kitRanking.map((item, i) => (
+                <div
+                  key={item.kitId}
+                  className={`flex items-center gap-3 p-3 rounded-2xl ${
+                    i === 0 ? "bg-amber-50 border border-amber-200" :
+                    i === 1 ? "bg-gray-50 border border-gray-200" :
+                    i === 2 ? "bg-orange-50 border border-orange-200" :
+                    "bg-white border border-gray-100"
+                  }`}
+                >
+                  <span className={`text-lg font-black w-8 text-center ${
+                    i === 0 ? "text-amber-500" : i === 1 ? "text-gray-400" : i === 2 ? "text-orange-500" : "text-gray-300"
+                  }`}>
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 font-bold text-[#262626] text-sm truncate">{item.nome}</span>
+                  <span className="font-black text-[#5D286C] text-sm shrink-0">{item.total} un.</span>
+                </div>
+              ))}
+              {kitRanking.length === 0 && (
+                <p className="text-center text-gray-400 font-bold py-8">Nenhum kit no período.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
