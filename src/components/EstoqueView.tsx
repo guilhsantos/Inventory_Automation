@@ -87,7 +87,7 @@ export default function EstoqueView() {
         .select("id, codigo_unico, cliente, order_items(quantidade, kit_id, kits(nome_kit))")
         .eq("status", "Pendente")
         .order("created_at", { ascending: true });
-      setPendingOrders((data as PendingOrder[]) || []);
+      setPendingOrders((data as unknown as PendingOrder[]) || []);
     } catch {
       setPendingOrders([]);
     } finally {
