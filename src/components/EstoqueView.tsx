@@ -104,8 +104,9 @@ export default function EstoqueView() {
     });
   }
 
-  function selectAll() {
-    setSelectedOrderIds(new Set(pendingOrders.map((o) => o.id)));
+  function toggleSelectAll() {
+    const allSelected = selectedOrderIds.size === pendingOrders.length && pendingOrders.length > 0;
+    setSelectedOrderIds(allSelected ? new Set() : new Set(pendingOrders.map((o) => o.id)));
   }
 
   async function runCalculation() {
@@ -407,10 +408,12 @@ export default function EstoqueView() {
                         </p>
                         <button
                           type="button"
-                          onClick={selectAll}
+                          onClick={toggleSelectAll}
                           className="text-xs font-black text-[#5D286C] hover:underline"
                         >
-                          Selecionar todos
+                          {selectedOrderIds.size === pendingOrders.length && pendingOrders.length > 0
+                            ? "Deselecionar todos"
+                            : "Selecionar todos"}
                         </button>
                       </div>
                       {pendingOrders.map((order) => {
