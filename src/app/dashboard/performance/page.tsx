@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Activity, Calendar, Download, Package, ArrowDown, ArrowUp, Cpu, ShoppingCart, X, Trophy } from "lucide-react";
 import { brDayRangeIso, formatDate, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
-import Link from "next/link";
 
 const KG_POR_SACO = 25;
 
@@ -29,6 +28,7 @@ type OrderRow = {
   data_entrega: string | null;
   totalKits: number;
   sortKey: number;
+  order_items: { kit_id: number; nome: string; quantidade: number }[];
 };
 
 type KitRankItem = {
@@ -39,7 +39,7 @@ type KitRankItem = {
 
 type RowFilter = "todos" | "defeitos" | "prod_maquina";
 type TableMode = "molde" | "kit" | "pedidos";
-type OrderStatus = "Pendente" | "Concluído" | "Entregue";
+type OrderStatus = "Todos" | "Pendente" | "Concluído" | "Entregue";
 
 type FetchParams = {
   rangeStart: string;
@@ -64,6 +64,7 @@ export default function PerformancePage() {
   const [orderRows, setOrderRows] = useState<OrderRow[]>([]);
   const [kitRanking, setKitRanking] = useState<KitRankItem[]>([]);
   const [kitRankOpen, setKitRankOpen] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [sortDesc, setSortDesc] = useState(true);
   const [cards, setCards] = useState({
     totalProduzido: 0,
@@ -119,12 +120,17 @@ export default function PerformancePage() {
           params.orderStatus === "Concluído" ? "concluido_em" :
           params.orderStatus === "Entregue"  ? "entregue_em"  : "created_at";
 
-        const { data: ordersRaw } = await supabase
+        let q = supabase
           .from("orders")
           .select("id, codigo_unico, cliente, status, data_entrega, order_items(quantidade, kit_id, kits(nome_kit))")
-          .eq("status", params.orderStatus)
           .gte(dateCol, startIso)
           .lte(dateCol, endIso);
+
+        if (params.orderStatus !== "Todos") {
+          q = q.eq("status", params.orderStatus);
+        }
+
+        const { data: ordersRaw } = await q;
 
         const orders = ordersRaw || [];
 
@@ -153,6 +159,11 @@ export default function PerformancePage() {
             data_entrega: o.data_entrega,
             totalKits,
             sortKey: new Date(o.created_at || 0).getTime(),
+            order_items: (o.order_items || []).map((item: any) => ({
+              kit_id: item.kit_id,
+              nome: item.kits?.nome_kit || `Kit #${item.kit_id}`,
+              quantidade: item.quantidade || 0,
+            })),
           };
         });
 
@@ -441,7 +452,10 @@ export default function PerformancePage() {
         <div className="flex flex-wrap gap-2 rounded-2xl bg-gray-100 p-1 text-xs font-black uppercase w-fit">
           <button
             type="button"
-            onClick={() => setTableMode("molde")}
+            onClick={() => {
+              setTableMode("molde");
+              void runFetch({ rangeStart: draftStart, rangeEnd: draftEnd, mode: "molde", rowFilter: draftRowFilter, machineId: draftMachineId, orderStatus: draftOrderStatus });
+            }}
             className={`px-4 py-2 rounded-2xl transition-all flex items-center gap-2 ${
               tableMode === "molde" ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
             }`}
@@ -450,7 +464,10 @@ export default function PerformancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setTableMode("kit")}
+            onClick={() => {
+              setTableMode("kit");
+              void runFetch({ rangeStart: draftStart, rangeEnd: draftEnd, mode: "kit", rowFilter: draftRowFilter, machineId: draftMachineId, orderStatus: draftOrderStatus });
+            }}
             className={`px-4 py-2 rounded-2xl transition-all flex items-center gap-2 ${
               tableMode === "kit" ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
             }`}
@@ -459,7 +476,10 @@ export default function PerformancePage() {
           </button>
           <button
             type="button"
-            onClick={() => setTableMode("pedidos")}
+            onClick={() => {
+              setTableMode("pedidos");
+              void runFetch({ rangeStart: draftStart, rangeEnd: draftEnd, mode: "pedidos", rowFilter: draftRowFilter, machineId: draftMachineId, orderStatus: draftOrderStatus });
+            }}
             className={`px-4 py-2 rounded-2xl transition-all flex items-center gap-2 ${
               tableMode === "pedidos" ? "bg-white text-[#5D286C] shadow-sm" : "text-gray-400"
             }`}
@@ -538,6 +558,7 @@ export default function PerformancePage() {
                 onChange={(e) => setDraftOrderStatus(e.target.value as OrderStatus)}
                 className="px-3 py-2 rounded-2xl border-2 border-gray-100 font-bold text-sm min-w-[180px]"
               >
+                <option value="Todos">Todos</option>
                 <option value="Pendente">Pendente</option>
                 <option value="Concluído">Concluído</option>
                 <option value="Entregue">Entregue</option>
@@ -712,22 +733,37 @@ export default function PerformancePage() {
               </thead>
               <tbody>
                 {sortedOrderRows.map((row, i) => (
-                  <tr key={row.id} className="border-b border-gray-50 font-bold hover:bg-gray-50 transition-colors">
-                    <td className="p-3 text-gray-400">{i + 1}</td>
-                    <td className="p-3">
-                      <Link
-                        href={`/orders/${row.id}?returnStatus=${encodeURIComponent(draftOrderStatus)}`}
-                        className="text-[#5D286C] font-black hover:underline"
-                      >
-                        {row.codigo_unico}
-                      </Link>
-                    </td>
-                    <td className="p-3 text-gray-700">{row.cliente}</td>
-                    <td className="p-3 text-gray-700">{row.totalKits}</td>
-                    <td className="p-3 text-gray-500 whitespace-nowrap">
-                      {row.data_entrega ? formatDate(row.data_entrega) : "—"}
-                    </td>
-                  </tr>
+                  <Fragment key={row.id}>
+                    <tr
+                      onClick={() => setExpandedOrderId(expandedOrderId === row.id ? null : row.id)}
+                      className="border-b border-gray-50 font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <td className="p-3 text-gray-400">{i + 1}</td>
+                      <td className="p-3 text-[#5D286C] font-black">{row.codigo_unico}</td>
+                      <td className="p-3 text-gray-700">{row.cliente}</td>
+                      <td className="p-3 text-gray-700">{row.totalKits}</td>
+                      <td className="p-3 text-gray-500 whitespace-nowrap">
+                        {row.data_entrega ? formatDate(row.data_entrega) : "—"}
+                      </td>
+                    </tr>
+                    {expandedOrderId === row.id && (
+                      <tr key={`${row.id}-expand`}>
+                        <td colSpan={5} className="px-4 pb-4 bg-purple-50/50">
+                          <div className="rounded-2xl border border-purple-100 p-4 space-y-2">
+                            {row.order_items.map((item) => (
+                              <div key={item.kit_id} className="flex justify-between text-sm font-bold">
+                                <span className="text-[#262626]">{item.nome}</span>
+                                <span className="text-[#5D286C]">{item.quantidade} un.</span>
+                              </div>
+                            ))}
+                            {row.order_items.length === 0 && (
+                              <p className="text-xs text-gray-400 font-bold">Nenhum item neste pedido.</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -764,13 +800,13 @@ export default function PerformancePage() {
                   key={item.kitId}
                   className={`flex items-center gap-3 p-3 rounded-2xl ${
                     i === 0 ? "bg-amber-50 border border-amber-200" :
-                    i === 1 ? "bg-gray-50 border border-gray-200" :
+                    i === 1 ? "bg-slate-200 border border-slate-300" :
                     i === 2 ? "bg-orange-50 border border-orange-200" :
                     "bg-white border border-gray-100"
                   }`}
                 >
                   <span className={`text-lg font-black w-8 text-center ${
-                    i === 0 ? "text-amber-500" : i === 1 ? "text-gray-400" : i === 2 ? "text-orange-500" : "text-gray-300"
+                    i === 0 ? "text-amber-500" : i === 1 ? "text-slate-500" : i === 2 ? "text-orange-500" : "text-gray-300"
                   }`}>
                     {i + 1}
                   </span>
