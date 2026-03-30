@@ -310,7 +310,7 @@ export default function OperatorDashboardPage() {
               <div className="space-y-4 md:space-y-6">
                 <div>
                   <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-2">Pedido</p>
-                  <Link href={`/orders/${currentOrder.id}`}>
+                  <Link href={`/orders/${currentOrder.id}?returnUrl=${encodeURIComponent('/operator/dashboard')}`}>
                     <h2 className="text-2xl md:text-4xl lg:text-5xl font-black hover:underline break-words">
                       {currentOrder.codigo_unico}
                     </h2>
@@ -418,7 +418,7 @@ export default function OperatorDashboardPage() {
                       ? "border-red-400 bg-red-950/40" 
                       : "border-white/10 bg-white/5"
                   } shadow-lg hover:scale-105 transition-transform cursor-pointer`}
-                  onClick={() => window.location.href = `/orders/${order.id}`}
+                  onClick={() => window.location.href = `/orders/${order.id}?returnUrl=${encodeURIComponent('/operator/dashboard')}`}
                 >
                   {order.is_priority && (
                     <div className="absolute -top-2 left-4">
