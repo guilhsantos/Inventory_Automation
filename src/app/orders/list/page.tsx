@@ -65,6 +65,12 @@ function OrdersListContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  useEffect(() => {
+    if (statusFilter === "Pendente") {
+      setCodeSortDesc(false);
+    }
+  }, [statusFilter]);
+
   function setStatusTab(status: StatusFilter) {
     setStatusFilter(status);
     const params = new URLSearchParams(searchParams.toString());
@@ -81,12 +87,7 @@ function OrdersListContent() {
         .eq("status", statusFilter);
 
       if (statusFilter === "Pendente") {
-        try {
-          query = query.order("is_priority", { ascending: false }).order("priority_position", { ascending: true });
-        } catch {
-          /* ignore */
-        }
-        query = query.order("created_at", { ascending: true });
+        query = query.order("codigo_unico", { ascending: true });
       } else {
         query = query.order("created_at", { ascending: false });
       }
@@ -337,7 +338,7 @@ function OrdersListContent() {
         (o.invoice_number || "").toLowerCase().includes(term)
       );
     });
-    if (statusFilter === "Concluído" || statusFilter === "Entregue") {
+    if (statusFilter === "Pendente" || statusFilter === "Concluído" || statusFilter === "Entregue") {
       list = [...list].sort((a, b) => {
         const cmp = parseCodigoOrder(a.codigo_unico, b.codigo_unico);
         return codeSortDesc ? -cmp : cmp;
@@ -370,7 +371,7 @@ function OrdersListContent() {
                 </button>
               ))}
             </div>
-            {(statusFilter === "Concluído" || statusFilter === "Entregue") && (
+            {(statusFilter === "Pendente" || statusFilter === "Concluído" || statusFilter === "Entregue") && (
               <button
                 type="button"
                 onClick={() => setCodeSortDesc((v) => !v)}

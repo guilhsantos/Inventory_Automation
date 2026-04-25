@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Package, Hammer, Loader2, Activity,
   ArrowDownWideNarrow, ArrowUpWideNarrow,
-  Calculator, X, CheckCircle, AlertTriangle, ChevronRight,
+  Calculator, X, CheckCircle, AlertTriangle, ChevronRight, Search,
 } from "lucide-react";
 
 type SortMode = "nome" | "estoque_asc" | "estoque_desc";
@@ -39,6 +39,10 @@ type CalcResult = {
   allOk: boolean;
 };
 
+function parseCodigoOrder(a: string, b: string): number {
+  return String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+}
+
 export default function EstoqueView() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"kit" | "pecas">("kit");
@@ -54,6 +58,8 @@ export default function EstoqueView() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcResult, setCalcResult] = useState<CalcResult | null>(null);
+  const [calcSearchTerm, setCalcSearchTerm] = useState("");
+  const [calcCodeSortDesc, setCalcCodeSortDesc] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -80,13 +86,15 @@ export default function EstoqueView() {
     setCalcStep("select");
     setCalcResult(null);
     setSelectedOrderIds(new Set());
+    setCalcSearchTerm("");
+    setCalcCodeSortDesc(false);
     setCalcLoading(true);
     try {
       const { data } = await supabase
         .from("orders")
         .select("id, codigo_unico, cliente, order_items(quantidade, kit_id, kits(nome_kit))")
         .eq("status", "Pendente")
-        .order("created_at", { ascending: true });
+        .order("codigo_unico", { ascending: true });
       setPendingOrders((data as unknown as PendingOrder[]) || []);
     } catch {
       setPendingOrders([]);
@@ -94,6 +102,25 @@ export default function EstoqueView() {
       setCalcLoading(false);
     }
   }
+
+  const visiblePendingOrders = useMemo(() => {
+    const term = calcSearchTerm.trim().toLowerCase();
+    let list = pendingOrders;
+
+    if (term) {
+      list = list.filter((order) => {
+        return (
+          String(order.codigo_unico).toLowerCase().includes(term) ||
+          String(order.cliente || "").toLowerCase().includes(term)
+        );
+      });
+    }
+
+    return [...list].sort((a, b) => {
+      const cmp = parseCodigoOrder(a.codigo_unico, b.codigo_unico);
+      return calcCodeSortDesc ? -cmp : cmp;
+    });
+  }, [pendingOrders, calcSearchTerm, calcCodeSortDesc]);
 
   function toggleOrder(id: number) {
     setSelectedOrderIds((prev) => {
@@ -105,8 +132,20 @@ export default function EstoqueView() {
   }
 
   function toggleSelectAll() {
-    const allSelected = selectedOrderIds.size === pendingOrders.length && pendingOrders.length > 0;
-    setSelectedOrderIds(allSelected ? new Set() : new Set(pendingOrders.map((o) => o.id)));
+    const visibleIds = visiblePendingOrders.map((o) => o.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedOrderIds.has(id));
+
+    setSelectedOrderIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        visibleIds.forEach((id) => next.delete(id));
+        return next;
+      }
+
+      const next = new Set(prev);
+      visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
   }
 
   async function runCalculation() {
@@ -402,21 +441,42 @@ export default function EstoqueView() {
                     <p className="text-center text-gray-400 font-bold py-10">Nenhum pedido pendente.</p>
                   ) : (
                     <>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                          <input
+                            type="text"
+                            placeholder="Buscar por código ou cliente..."
+                            value={calcSearchTerm}
+                            onChange={(e) => setCalcSearchTerm(e.target.value)}
+                            className="w-full p-3 pl-10 bg-white border-2 border-gray-100 rounded-2xl text-sm font-bold outline-none focus:border-[#5D286C]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCalcCodeSortDesc((v) => !v)}
+                          className="inline-flex items-center justify-center gap-2 px-3 py-3 rounded-2xl bg-white border-2 border-gray-100 text-xs font-black text-[#5D286C] hover:border-[#5D286C]"
+                          title="Ordenar por código do pedido"
+                        >
+                          Código {calcCodeSortDesc ? <ArrowDownWideNarrow size={16} /> : <ArrowUpWideNarrow size={16} />}
+                        </button>
+                      </div>
                       <div className="flex justify-between items-center mb-2">
                         <p className="text-sm font-black text-gray-500">
-                          {selectedOrderIds.size} de {pendingOrders.length} selecionados
+                          {selectedOrderIds.size} selecionados ({visiblePendingOrders.length} visíveis)
                         </p>
                         <button
                           type="button"
                           onClick={toggleSelectAll}
                           className="text-xs font-black text-[#5D286C] hover:underline"
                         >
-                          {selectedOrderIds.size === pendingOrders.length && pendingOrders.length > 0
+                          {visiblePendingOrders.length > 0 &&
+                          visiblePendingOrders.every((order) => selectedOrderIds.has(order.id))
                             ? "Deselecionar todos"
                             : "Selecionar todos"}
                         </button>
                       </div>
-                      {pendingOrders.map((order) => {
+                      {visiblePendingOrders.map((order) => {
                         const selected = selectedOrderIds.has(order.id);
                         const totalKits = order.order_items.reduce((a, i) => a + i.quantidade, 0);
                         return (
@@ -447,6 +507,9 @@ export default function EstoqueView() {
                           </div>
                         );
                       })}
+                      {visiblePendingOrders.length === 0 && (
+                        <p className="text-center text-gray-400 font-bold py-10">Nenhum pedido encontrado na busca.</p>
+                      )}
                     </>
                   )}
                 </div>

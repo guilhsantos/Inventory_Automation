@@ -28,6 +28,10 @@ type OperatorOrder = {
   stockPercentage?: number;
 };
 
+function parseCodigoOrder(a: string, b: string): number {
+  return String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+}
+
 export default function OperatorDashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -125,7 +129,19 @@ export default function OperatorDashboardPage() {
             return { ...order, stockPercentage };
           });
 
-          const newOrderIds = new Set<number>(ordersWithStock.map((o: any) => o.id as number));
+          const sortedOrdersWithStock = [...ordersWithStock].sort((a: OperatorOrder, b: OperatorOrder) => {
+            if (a.is_priority !== b.is_priority) return a.is_priority ? -1 : 1;
+
+            if (a.is_priority && b.is_priority) {
+              const aPos = typeof a.priority_position === "number" ? a.priority_position : Number.MAX_SAFE_INTEGER;
+              const bPos = typeof b.priority_position === "number" ? b.priority_position : Number.MAX_SAFE_INTEGER;
+              if (aPos !== bPos) return aPos - bPos;
+            }
+
+            return parseCodigoOrder(a.codigo_unico, b.codigo_unico);
+          });
+
+          const newOrderIds = new Set<number>(sortedOrdersWithStock.map((o: any) => o.id as number));
           const hasNewOrders =
             previousOrderIds.size > 0 && Array.from(newOrderIds).some((id: number) => !previousOrderIds.has(id));
 
@@ -134,7 +150,7 @@ export default function OperatorDashboardPage() {
           }
 
           previousOrdersRef.current = newOrderIds;
-          setOrders(ordersWithStock as OperatorOrder[]);
+          setOrders(sortedOrdersWithStock as OperatorOrder[]);
         } else {
           previousOrdersRef.current = new Set();
           setOrders([]);
