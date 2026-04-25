@@ -50,6 +50,22 @@ export function formatDate(date: string | Date | null | undefined): string {
   });
 }
 
+/** Exibe data e hora em BR (dd/mm/yyyy HH:mm). */
+export function formatDateTime(date: string | Date | null | undefined): string {
+  if (date == null || date === "") return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", {
+    timeZone: TZ_BR,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 /** Chave de agrupamento por dia civil em BR (ex.: gráficos). */
 export function formatDayKeyBrFromTimestamp(iso: string): string {
   const d = new Date(iso);

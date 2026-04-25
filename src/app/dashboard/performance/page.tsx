@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Activity, Calendar, Download, Package, ArrowDown, ArrowUp, Cpu, ShoppingCart, X, Trophy } from "lucide-react";
-import { brDayRangeIso, formatDate, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
+import { brDayRangeIso, formatDate, formatDateTime, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 
 const KG_POR_SACO = 25;
@@ -18,6 +18,8 @@ type TableRow = {
   qtd: number;
   kg: number;
   obs: string;
+  usuario: string;
+  userId?: string | null;
   machineId: number | null;
 };
 
@@ -199,7 +201,7 @@ export default function PerformancePage() {
         let prodQ = supabase
           .from("daily_production")
           .select(
-            "molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, moldes(nome), machines(nome), materials(nome)"
+            "molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, usuario_id, moldes(nome), machines(nome), materials(nome)"
           )
           .gte("created_at", startIso)
           .lte("created_at", endIso);
@@ -208,7 +210,7 @@ export default function PerformancePage() {
           prodQ,
           supabase
             .from("defects")
-            .select("molde_id, machine_id, quantity, reason, created_at, moldes(nome), machines(nome)")
+            .select("molde_id, machine_id, quantity, reason, created_at, user_id, moldes(nome), machines(nome)")
             .gte("created_at", startIso)
             .lte("created_at", endIso),
         ]);
@@ -220,7 +222,7 @@ export default function PerformancePage() {
       } else {
         const movRes = await supabase
           .from("stock_movements")
-          .select("kit_id, quantity, created_at, type, kits(nome_kit)")
+          .select("kit_id, quantity, created_at, user_id, type, kits(nome_kit)")
           .eq("type", "IN")
           .not("kit_id", "is", null)
           .gte("created_at", startIso)
@@ -228,11 +230,40 @@ export default function PerformancePage() {
         movements = movRes.data || [];
         const prodRes = await supabase
           .from("daily_production")
-          .select("molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, materials(nome)")
+          .select("molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, usuario_id, materials(nome)")
           .gte("created_at", startIso)
           .lte("created_at", endIso);
         production = prodRes.data || [];
       }
+
+      const userIds = new Set<string>();
+      production.forEach((row: any) => {
+        if (row?.usuario_id) userIds.add(String(row.usuario_id));
+      });
+      defects.forEach((row: any) => {
+        if (row?.user_id) userIds.add(String(row.user_id));
+      });
+      movements.forEach((row: any) => {
+        if (row?.user_id) userIds.add(String(row.user_id));
+      });
+
+      const userNameById = new Map<string, string>();
+      if (userIds.size > 0) {
+        const { data: profileRows } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", Array.from(userIds));
+
+        (profileRows || []).forEach((p: any) => {
+          const displayName = String(p.full_name || p.email || "").trim();
+          if (p.id) userNameById.set(String(p.id), displayName || "Usuário não identificado");
+        });
+      }
+
+      const resolveUserName = (userId: string | null | undefined) => {
+        if (!userId) return "Usuário não identificado";
+        return userNameById.get(String(userId)) || "Usuário não identificado";
+      };
 
       const byMolde = new Map<number, { kg: number; pieces: number }>();
       let sumKgProd = 0;
@@ -339,6 +370,8 @@ export default function PerformancePage() {
               qtd: row.quantidade_boa || 0,
               kg,
               obs: "",
+              usuario: resolveUserName(row.usuario_id),
+              userId: row.usuario_id ? String(row.usuario_id) : null,
               machineId: row.machine_id ?? null,
             });
           });
@@ -355,6 +388,8 @@ export default function PerformancePage() {
               qtd: row.quantity || 0,
               kg: 0,
               obs: row.reason || "—",
+              usuario: resolveUserName(row.user_id),
+              userId: row.user_id ? String(row.user_id) : null,
               machineId: row.machine_id ?? null,
             });
           });
@@ -374,6 +409,8 @@ export default function PerformancePage() {
             qtd: q,
             kg: q * kgKit,
             obs: "",
+            usuario: resolveUserName(row.user_id),
+            userId: row.user_id ? String(row.user_id) : null,
             machineId: null,
           });
         });
@@ -419,10 +456,11 @@ export default function PerformancePage() {
       Molde: r.molde,
       Máquina: r.maquina,
       Material: r.material,
-      Data: formatDate(r.dataRaw),
+      "Data/Hora": formatDateTime(r.dataRaw),
       "Qtd produzida": r.qtd,
       "Kg material": r.kg,
       Observação: r.obs,
+      Usuário: r.usuario,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -673,10 +711,11 @@ export default function PerformancePage() {
                   <th className="p-3">Molde / Kit</th>
                   <th className="p-3">Máquina</th>
                   <th className="p-3">Material</th>
-                  <th className="p-3">Data</th>
+                  <th className="p-3">Data/Hora</th>
                   <th className="p-3">Qtd</th>
                   <th className="p-3">Kg</th>
                   <th className="p-3">Obs.</th>
+                  <th className="p-3">Usuário</th>
                 </tr>
               </thead>
               <tbody>
@@ -693,10 +732,11 @@ export default function PerformancePage() {
                       <td className="p-3">{row.molde}</td>
                       <td className="p-3">{row.maquina}</td>
                       <td className="p-3">{row.material}</td>
-                      <td className="p-3 whitespace-nowrap">{formatDate(row.dataRaw)}</td>
+                      <td className="p-3 whitespace-nowrap">{formatDateTime(row.dataRaw)}</td>
                       <td className="p-3">{row.qtd}</td>
                       <td className="p-3">{row.kg > 0 ? row.kg.toFixed(2) : "—"}</td>
                       <td className="p-3 max-w-[200px]">{row.obs}</td>
+                      <td className="p-3 whitespace-nowrap">{row.usuario}</td>
                     </tr>
                   );
                 })}
