@@ -21,13 +21,23 @@ export default function OrderCheckoutPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const getActiveReservedForItem = (item: any): number => {
+    const fromRows = (item.order_item_reservations || [])
+      .filter((r: any) => r.status === "active")
+      .reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
+    const fromCounter = Number(item.qty_reserved_total || 0);
+    return Math.max(fromRows, fromCounter);
+  };
+
   const handleSearchOrder = async () => {
     if (!orderCode.trim()) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico, estoque_atual))")
+        .select(
+          "*, order_items(id, quantidade, qty_reserved_total, qty_consumed_total, kit_id, kits(nome_kit, codigo_unico, estoque_atual), order_item_reservations(id, qty_reserved, status, created_by, created_at))"
+        )
         .eq("codigo_unico", orderCode.toUpperCase())
         .eq("status", "Pendente")
         .single();
@@ -66,16 +76,20 @@ export default function OrderCheckoutPage() {
 
     setIsSubmitting(true);
     try {
-      // 1. Verificar estoque de cada kit do pedido
+      // 1. Verificar estoque considerando reservas já feitas para esse pedido
       const missingKits: string[] = [];
       if (order.order_items && order.order_items.length > 0) {
         for (const item of order.order_items) {
+          const alreadyReserved = getActiveReservedForItem(item);
+          const pendingToConsume = Math.max(0, (item.quantidade || 0) - alreadyReserved);
           const requiredQty = item.quantidade || 0;
           const availableStock = item.kits?.estoque_atual || 0;
 
-          if (availableStock < requiredQty) {
-            const missing = requiredQty - availableStock;
-            missingKits.push(`${item.kits?.nome_kit || 'Kit desconhecido'}\nFaltam: ${missing} unidade(s)`);
+          if (availableStock < pendingToConsume) {
+            const missing = pendingToConsume - availableStock;
+            missingKits.push(
+              `${item.kits?.nome_kit || "Kit desconhecido"}\nReservado: ${alreadyReserved}/${requiredQty}\nFaltam: ${missing} unidade(s)`
+            );
           }
         }
       }
@@ -115,17 +129,76 @@ export default function OrderCheckoutPage() {
 
       if (updateError) throw updateError;
 
-      // Descontar estoque dos kits
+      // Consumir reservas ativas e descontar apenas saldo restante de cada item
       for (const item of order.order_items || []) {
+        const activeReservations = (item.order_item_reservations || []).filter((r: any) => r.status === "active");
+        const reservedQty = activeReservations.reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
+        const qtyNeeded = Number(item.quantidade || 0);
+        const pendingToConsume = Math.max(0, qtyNeeded - reservedQty);
         const currentStock = item.kits?.estoque_atual ?? 0;
-        const newStock = Math.max(0, currentStock - item.quantidade);
+        const newStock = Math.max(0, currentStock - pendingToConsume);
 
-        const { error: kitError } = await supabase
-          .from("kits")
-          .update({ estoque_atual: newStock })
-          .eq("id", item.kit_id);
+        if (pendingToConsume > 0) {
+          const { error: kitError } = await supabase
+            .from("kits")
+            .update({ estoque_atual: newStock })
+            .eq("id", item.kit_id);
 
-        if (kitError) throw kitError;
+          if (kitError) throw kitError;
+        }
+
+        for (const reservation of activeReservations) {
+          const { error: reservationError } = await supabase
+            .from("order_item_reservations")
+            .update({
+              status: "consumed",
+              consumed_by: user?.id || null,
+              consumed_at: new Date().toISOString(),
+            })
+            .eq("id", reservation.id);
+          if (reservationError) throw reservationError;
+
+          const { error: reservationMovementError } = await supabase
+            .from("stock_movements")
+            .insert({
+              kit_id: item.kit_id,
+              user_id: user?.id || null,
+              type: "OUT",
+              quantity: reservation.qty_reserved || 0,
+              notes: `Reserva consumida na baixa completa do pedido ${order.codigo_unico}`,
+              movement_kind: "consume",
+              order_id: order.id,
+              order_item_id: item.id,
+              reservation_id: reservation.id,
+            });
+          if (reservationMovementError) throw reservationMovementError;
+        }
+
+        if (pendingToConsume > 0) {
+          const { error: pendingMovementError } = await supabase
+            .from("stock_movements")
+            .insert({
+              kit_id: item.kit_id,
+              user_id: user?.id || null,
+              type: "OUT",
+              quantity: pendingToConsume,
+              notes: `Baixa direta na conclusão do pedido ${order.codigo_unico}`,
+              movement_kind: "consume",
+              order_id: order.id,
+              order_item_id: item.id,
+            });
+          if (pendingMovementError) throw pendingMovementError;
+        }
+
+        const currentConsumed = Number(item.qty_consumed_total || 0);
+        const { error: itemUpdateError } = await supabase
+          .from("order_items")
+          .update({
+            qty_reserved_total: 0,
+            qty_consumed_total: currentConsumed + qtyNeeded,
+          })
+          .eq("id", item.id);
+        if (itemUpdateError) throw itemUpdateError;
       }
 
       showToast("Pedido concluído com sucesso! Estoque atualizado.");

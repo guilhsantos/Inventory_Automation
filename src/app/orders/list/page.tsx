@@ -305,6 +305,48 @@ function OrdersListContent() {
     const order = deleteModal.order;
 
     try {
+      // Reverter reservas ativas antes de excluir o pedido
+      const { data: orderItemsWithReservations, error: itemsFetchError } = await supabase
+        .from("order_items")
+        .select(
+          "id, kit_id, qty_reserved_total, kits(estoque_atual), order_item_reservations(id, qty_reserved, status)"
+        )
+        .eq("order_id", order.id);
+
+      if (itemsFetchError) throw itemsFetchError;
+
+      for (const item of orderItemsWithReservations || []) {
+        const activeReservations = (item.order_item_reservations || []).filter((r: any) => r.status === "active");
+        if (activeReservations.length === 0) continue;
+
+        const qtyToRestore = activeReservations.reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
+        const currentStock = item.kits?.estoque_atual || 0;
+
+        const { error: kitRestoreError } = await supabase
+          .from("kits")
+          .update({ estoque_atual: currentStock + qtyToRestore })
+          .eq("id", item.kit_id);
+        if (kitRestoreError) throw kitRestoreError;
+
+        for (const reservation of activeReservations) {
+          const { error: reservationError } = await supabase
+            .from("order_item_reservations")
+            .update({
+              status: "reversed",
+              reversed_at: new Date().toISOString(),
+              reverse_reason: "Reversão automática por exclusão do pedido",
+            })
+            .eq("id", reservation.id);
+          if (reservationError) throw reservationError;
+        }
+
+        const { error: itemResetError } = await supabase
+          .from("order_items")
+          .update({ qty_reserved_total: 0 })
+          .eq("id", item.id);
+        if (itemResetError) throw itemResetError;
+      }
+
       // Deletar order_items primeiro (devido à foreign key)
       const { error: itemsError } = await supabase
         .from("order_items")

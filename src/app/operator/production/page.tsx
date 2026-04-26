@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Hammer, Package, AlertTriangle, CheckCircle } from "lucide-react";
+import { Hammer, Package, AlertTriangle, CheckCircle, Archive } from "lucide-react";
 
 export default function OperatorProductionPage() {
   const actions = [
@@ -27,6 +27,13 @@ export default function OperatorProductionPage() {
       color: "bg-red-600",
     },
     {
+      title: "Reservar",
+      description: "Separar kits por pedido pendente",
+      icon: <Archive size={40} />,
+      path: "/operator/reserve",
+      color: "bg-amber-600",
+    },
+    {
       title: "Baixa de Pedido",
       description: "Concluir pedidos pendentes com foto",
       icon: <CheckCircle size={40} />,
@@ -42,12 +49,29 @@ export default function OperatorProductionPage() {
         <p className="text-gray-500 font-bold mt-2">Selecione a atividade que deseja realizar agora.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {actions.map((action) => (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {actions.slice(0, 3).map((action) => (
           <Link 
             key={action.title} 
             href={action.path}
-            className="group relative bg-white p-8 rounded-[2.5rem] border-2 border-gray-100 shadow-sm hover:shadow-xl hover:border-transparent transition-all overflow-hidden flex flex-col items-center text-center"
+            className="group relative bg-white p-8 rounded-[2.5rem] border-2 border-gray-100 shadow-sm hover:shadow-xl hover:border-transparent transition-all overflow-hidden flex flex-col items-center text-center min-h-[340px]"
+          >
+            <div className={`${action.color} text-white p-6 rounded-3xl mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
+              {action.icon}
+            </div>
+            <h3 className="text-2xl font-black text-[#262626] mb-2">{action.title}</h3>
+            <p className="text-gray-400 font-medium text-sm leading-relaxed">
+              {action.description}
+            </p>
+          </Link>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:max-w-2xl md:mx-auto">
+        {actions.slice(3).map((action) => (
+          <Link
+            key={action.title}
+            href={action.path}
+            className="group relative bg-white p-8 rounded-[2.5rem] border-2 border-gray-100 shadow-sm hover:shadow-xl hover:border-transparent transition-all overflow-hidden flex flex-col items-center text-center min-h-[340px]"
           >
             <div className={`${action.color} text-white p-6 rounded-3xl mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
               {action.icon}
