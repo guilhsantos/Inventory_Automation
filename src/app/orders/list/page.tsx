@@ -320,7 +320,8 @@ function OrdersListContent() {
         if (activeReservations.length === 0) continue;
 
         const qtyToRestore = activeReservations.reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
-        const currentStock = item.kits?.estoque_atual || 0;
+        const kitRow = Array.isArray(item.kits) ? item.kits[0] : item.kits;
+        const currentStock = kitRow?.estoque_atual || 0;
 
         const { error: kitRestoreError } = await supabase
           .from("kits")

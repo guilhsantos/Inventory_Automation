@@ -28,12 +28,33 @@ type ReserveOrderItem = {
   order_item_reservations?: OrderItemReservation[];
 };
 
+type ReserveOrderItemRaw = Omit<ReserveOrderItem, "kits"> & {
+  kits:
+    | {
+        id: number;
+        nome_kit: string;
+        codigo_unico: string;
+        estoque_atual: number;
+      }[]
+    | {
+        id: number;
+        nome_kit: string;
+        codigo_unico: string;
+        estoque_atual: number;
+      }
+    | null;
+};
+
 type PendingOrder = {
   id: number;
   codigo_unico: string;
   cliente: string;
   status: string;
   order_items: ReserveOrderItem[];
+};
+
+type PendingOrderRaw = Omit<PendingOrder, "order_items"> & {
+  order_items: ReserveOrderItemRaw[];
 };
 
 export default function ReserveOrderPage() {
@@ -81,13 +102,21 @@ export default function ReserveOrderPage() {
       }
 
       const byItem: Record<number, string> = {};
-      (data.order_items || []).forEach((item: any) => {
+      ((data as PendingOrderRaw).order_items || []).forEach((item) => {
         byItem[item.id] = "";
       });
 
+      const normalizedOrder: PendingOrder = {
+        ...(data as PendingOrderRaw),
+        order_items: ((data as PendingOrderRaw).order_items || []).map((item) => ({
+          ...item,
+          kits: Array.isArray(item.kits) ? item.kits[0] || null : item.kits,
+        })),
+      };
+
       setQtyByItemId(byItem);
       setObservation("");
-      setOrder(data as PendingOrder);
+      setOrder(normalizedOrder);
     } catch (err: any) {
       setOrder(null);
       showToast(err?.message || "Erro ao buscar pedido.", "error");
