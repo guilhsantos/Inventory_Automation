@@ -15,6 +15,7 @@ import {
   orderHasActiveReservations,
   orderHasGhostCounters,
   revertOrderReservations,
+  sortItemsByReservation,
   sumOrderReserved,
   sumOrderRemaining,
 } from "@/lib/order-reservations";
@@ -482,35 +483,62 @@ export default function OperatorDashboardPage() {
                 <p className="text-xs font-black text-gray-400 uppercase tracking-[0.3em] mb-4">Kits do Pedido</p>
                 <div className="space-y-3 max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2">
                   {currentOrder.order_items && currentOrder.order_items.length > 0 ? (
-                    currentOrder.order_items.map((item, idx) => (
+                    sortItemsByReservation(currentOrder.order_items || []).map((item, idx) => {
+                      const required = item.quantidade || 0;
+                      const stockPhysical = item.kits?.estoque_atual || 0;
+                      const reserved = getDisplayReservedQty(item);
+                      const missing = getRemainingQty(item);
+                      const availableForOrder = stockPhysical + reserved;
+                      const fullyReserved = reserved > 0 && missing === 0;
+                      const partiallyReserved = reserved > 0 && missing > 0;
+                      const cardClass = fullyReserved
+                        ? "bg-amber-500/15 border-amber-400/40"
+                        : partiallyReserved
+                          ? "bg-amber-500/10 border-amber-400/25"
+                          : "bg-white/5 border-white/10 hover:bg-white/10";
+
+                      return (
                       <div
-                        key={idx}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:bg-white/10 transition-all"
-                      >{(() => {
-                        const required = item.quantidade || 0;
-                        const stockPhysical = item.kits?.estoque_atual || 0;
-                        const reserved = getDisplayReservedQty(item);
-                        const missing = getRemainingQty(item);
-                        const availableForOrder = stockPhysical + reserved;
-                        return (
-                          <>
-                        <div className="flex items-center justify-between mb-2">
+                        key={item.id ?? idx}
+                        className={`rounded-2xl p-4 transition-all border ${cardClass}`}
+                      >
+                        <div className="flex items-center justify-between mb-2 gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-black text-gray-300 truncate">
-                              {item.kits?.nome_kit || `Kit #${item.kit_id}`}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-black text-gray-300 truncate">
+                                {item.kits?.nome_kit || `Kit #${item.kit_id}`}
+                              </p>
+                              {fullyReserved && (
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 shrink-0">
+                                  Reservado
+                                </span>
+                              )}
+                              {partiallyReserved && (
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 shrink-0">
+                                  Parcial
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs font-bold text-gray-500 uppercase">
-                              {item.kits?.codigo_unico || 'N/A'}
+                              {item.kits?.codigo_unico || "N/A"}
                             </p>
                           </div>
-                          <div className="text-right ml-4">
-                            <p className="text-lg font-black text-yellow-300">{item.quantidade || 0}</p>
+                          <div className="text-right ml-4 shrink-0">
+                            <p className={`text-lg font-black ${reserved > 0 ? "text-amber-200" : "text-yellow-300"}`}>
+                              {item.quantidade || 0}
+                            </p>
                             <p className="text-[10px] font-bold text-gray-500 uppercase">unidades</p>
                           </div>
                         </div>
                         <div className="pt-2 border-t border-white/5 space-y-1">
-                          <p className="text-[10px] font-bold text-gray-400">
-                            Pedido: {required} | Reservado: {reserved} | Faltante: {missing}
+                          <p className="text-[10px] font-bold flex flex-wrap gap-x-2 gap-y-0.5">
+                            <span className="text-gray-400">Pedido: {required}</span>
+                            <span className={reserved > 0 ? "text-amber-200 font-black" : "text-gray-400"}>
+                              Reservado: {reserved}
+                            </span>
+                            <span className={missing > 0 ? "text-red-400 font-black" : "text-green-400"}>
+                              Faltante: {missing}
+                            </span>
                           </p>
                           <p className="text-[10px] font-bold">
                             Estoque:{" "}
@@ -519,10 +547,9 @@ export default function OperatorDashboardPage() {
                             </span>
                           </p>
                         </div>
-                          </>
-                        );
-                      })()}</div>
-                    ))
+                      </div>
+                    );
+                    })
                   ) : (
                     <p className="text-sm font-bold text-gray-500 text-center py-4">
                       Nenhum kit cadastrado neste pedido

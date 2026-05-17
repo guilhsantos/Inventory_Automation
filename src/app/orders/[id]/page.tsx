@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from "lucide-react";
@@ -11,6 +11,7 @@ import {
   getDisplayReservedQty,
   getRemainingQty,
   orderHasActiveReservations,
+  sortItemsByReservation,
 } from "@/lib/order-reservations";
 
 const RETURN_STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
@@ -36,6 +37,11 @@ function OrderDetailsInner() {
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   useStuckLoadingRecovery(loading);
+
+  const sortedItems = useMemo(
+    () => sortItemsByReservation(order?.order_items ?? []),
+    [order]
+  );
 
   useEffect(() => {
     if (!orderId) return;
@@ -149,14 +155,14 @@ function OrderDetailsInner() {
               <Package size={16} className="text-[#5D286C]" /> Itens do Pedido
             </h2>
             <div className="space-y-3">
-              {(order.order_items || []).map((item: any, idx: number) => {
+              {sortedItems.map((item: any, idx: number) => {
                 const reserved = getDisplayReservedQty(item);
                 const missing = getRemainingQty(item);
                 const fullyReserved = reserved > 0 && missing === 0;
                 const partiallyReserved = reserved > 0 && missing > 0;
                 return (
                 <div
-                  key={idx}
+                  key={item.id ?? idx}
                   className={`flex justify-between items-start rounded-2xl px-4 py-3 gap-3 border ${
                     fullyReserved
                       ? "bg-amber-50 border-amber-200"

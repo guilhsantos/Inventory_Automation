@@ -73,6 +73,19 @@ export function sumOrderRemaining(items: OrderItemWithReservations[]): number {
   return items.reduce((sum, item) => sum + getRemainingQty(item), 0);
 }
 
+/** Kits com reserva primeiro; entre reservados, maior quantidade reservada primeiro. */
+export function sortItemsByReservation<T extends OrderItemWithReservations>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const ra = getDisplayReservedQty(a);
+    const rb = getDisplayReservedQty(b);
+    const aHas = ra > 0 ? 1 : 0;
+    const bHas = rb > 0 ? 1 : 0;
+    if (bHas !== aHas) return bHas - aHas;
+    if (rb !== ra) return rb - ra;
+    return 0;
+  });
+}
+
 async function fetchKitStock(kitId: number): Promise<number> {
   const { data, error } = await supabase.from("kits").select("estoque_atual").eq("id", kitId).single();
   if (error) throw error;
