@@ -8,6 +8,16 @@ import { Loader2, AlertTriangle, Package, Clock, Volume2, TrendingUp, ChevronRig
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
+import { useToast } from "@/lib/toast-context";
+import {
+  getDisplayReservedQty,
+  getRemainingQty,
+  orderHasActiveReservations,
+  orderHasGhostCounters,
+  revertOrderReservations,
+  sumOrderReserved,
+  sumOrderRemaining,
+} from "@/lib/order-reservations";
 
 type OperatorOrder = {
   id: number;
@@ -35,7 +45,9 @@ type OperatorOrder = {
   stockPercentage?: number;
   reservedPercentage?: number;
   reservedTotal?: number;
+  remainingTotal?: number;
   hasActiveReservations?: boolean;
+  hasGhostCounters?: boolean;
 };
 
 function parseCodigoOrder(a: string, b: string): number {
@@ -44,6 +56,7 @@ function parseCodigoOrder(a: string, b: string): number {
 
 export default function OperatorDashboardPage() {
   const { user, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
   const [orders, setOrders] = useState<OperatorOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,26 +140,32 @@ export default function OperatorDashboardPage() {
           const ordersWithStock = data.map((order: any) => {
             let totalNeeded = 0;
             let totalAvailable = 0;
-            let totalReserved = 0;
-            let hasActiveReservations = false;
+            const items = order.order_items || [];
+            const totalReserved = sumOrderReserved(items);
+            const totalRemaining = sumOrderRemaining(items);
+            const hasActiveReservations = orderHasActiveReservations(items);
+            const hasGhostCounters = orderHasGhostCounters(items);
 
-            order.order_items?.forEach((item: any) => {
+            items.forEach((item: any) => {
               const needed = item.quantidade || 0;
               const available = item.kits?.estoque_atual || 0;
-              const reservedFromLogs = (item.order_item_reservations || [])
-                .filter((r: any) => r.status === "active")
-                .reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
-              const reserved = Math.max(reservedFromLogs, Number(item.qty_reserved_total || 0));
+              const reserved = getDisplayReservedQty(item);
               totalNeeded += needed;
               totalAvailable += Math.min(needed, available);
-              totalReserved += reserved;
-              if (reserved > 0) hasActiveReservations = true;
             });
 
             const progressPercentage =
               totalNeeded > 0 ? Math.round((Math.min(totalNeeded, totalAvailable + totalReserved) / totalNeeded) * 100) : 100;
 
-            return { ...order, stockPercentage: progressPercentage, reservedPercentage: progressPercentage, reservedTotal: totalReserved, hasActiveReservations };
+            return {
+              ...order,
+              stockPercentage: progressPercentage,
+              reservedPercentage: progressPercentage,
+              reservedTotal: totalReserved,
+              remainingTotal: totalRemaining,
+              hasActiveReservations,
+              hasGhostCounters,
+            };
           });
 
           const sortedOrdersWithStock = [...ordersWithStock].sort((a: OperatorOrder, b: OperatorOrder) => {
@@ -285,70 +304,34 @@ export default function OperatorDashboardPage() {
   const queueOrders = orders.filter(o => o.id !== currentOrder?.id);
 
   const totalKits = (order: OperatorOrder) => order.order_items?.reduce((acc, i) => acc + (i.quantidade || 0), 0) || 0;
-  const reservedForItem = (item: OperatorOrder["order_items"][number]) => {
-    const byRows = (item.order_item_reservations || [])
-      .filter((r) => r.status === "active")
-      .reduce((sum, r) => sum + (r.qty_reserved || 0), 0);
-    return Math.max(byRows, Number(item.qty_reserved_total || 0));
-  };
+  const canRevertReservations = (order: OperatorOrder) =>
+    order.hasActiveReservations || order.hasGhostCounters;
 
   const handleRevertReservations = async (order: OperatorOrder) => {
-    if (!user || !order.hasActiveReservations || revertingOrderId) return;
+    if (!user || !canRevertReservations(order) || revertingOrderId) return;
     setRevertingOrderId(order.id);
     try {
-      const activeReservations = (order.order_items || []).flatMap((item) =>
-        (item.order_item_reservations || [])
-          .filter((r) => r.status === "active")
-          .map((r) => ({ reservation: r, item }))
+      const result = await revertOrderReservations(
+        order.id,
+        order.codigo_unico,
+        "Reversão manual no dashboard",
+        user.id
       );
 
-      for (const { reservation, item } of activeReservations) {
-        const currentStock = item.kits?.estoque_atual || 0;
-        const restoreQty = reservation.qty_reserved || 0;
-
-        const { error: kitError } = await supabase
-          .from("kits")
-          .update({ estoque_atual: currentStock + restoreQty })
-          .eq("id", item.kit_id);
-        if (kitError) throw kitError;
-
-        const { error: reservationError } = await supabase
-          .from("order_item_reservations")
-          .update({
-            status: "reversed",
-            reversed_by: user.id,
-            reversed_at: new Date().toISOString(),
-            reverse_reason: "Reversão manual no dashboard",
-          })
-          .eq("id", reservation.id);
-        if (reservationError) throw reservationError;
-
-        const nextReservedTotal = Math.max(0, Number(item.qty_reserved_total || 0) - restoreQty);
-        const { error: itemError } = await supabase
-          .from("order_items")
-          .update({ qty_reserved_total: nextReservedTotal })
-          .eq("id", item.id);
-        if (itemError) throw itemError;
-
-        const { error: movementError } = await supabase
-          .from("stock_movements")
-          .insert({
-            kit_id: item.kit_id,
-            user_id: user.id,
-            type: "IN",
-            quantity: restoreQty,
-            notes: `Reversão de reserva do pedido ${order.codigo_unico}`,
-            movement_kind: "unreserve",
-            order_id: order.id,
-            order_item_id: item.id,
-            reservation_id: reservation.id,
-          });
-        if (movementError) throw movementError;
+      if (result.rowsReverted === 0 && result.ghostCountersCleared === 0) {
+        showToast("Nenhuma reserva ativa para reverter.", "error");
+      } else if (result.rowsReverted > 0) {
+        showToast(
+          `Reservas revertidas: ${result.stockRestored} kit(s) devolvido(s) ao estoque.`
+        );
+      } else {
+        showToast(`Contador corrigido (${result.ghostCountersCleared} kit(s)).`);
       }
 
       await fetchOrders();
     } catch (err: any) {
       setError(err?.message || "Erro ao reverter reservas");
+      showToast(err?.message || "Erro ao reverter reservas", "error");
     } finally {
       setRevertingOrderId(null);
     }
@@ -427,7 +410,9 @@ export default function OperatorDashboardPage() {
                   {currentOrder.hasActiveReservations && (
                     <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-500/20 border border-amber-300/40 px-3 py-1">
                       <span className="text-[10px] font-black uppercase text-amber-200">Reserva ativa</span>
-                      <span className="text-xs font-black text-amber-100">{currentOrder.reservedTotal || 0} kits separados</span>
+                      <span className="text-xs font-black text-amber-100">
+                        Reservado: {currentOrder.reservedTotal || 0} | Faltante: {currentOrder.remainingTotal || 0}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -475,14 +460,18 @@ export default function OperatorDashboardPage() {
                       style={{ width: `${currentOrder.stockPercentage || 0}%` }}
                     />
                   </div>
-                  {currentOrder.hasActiveReservations && (
+                  {canRevertReservations(currentOrder) && (
                     <button
                       type="button"
                       onClick={() => handleRevertReservations(currentOrder)}
                       disabled={revertingOrderId === currentOrder.id}
                       className="mt-4 rounded-xl bg-amber-500/20 border border-amber-300/40 px-3 py-2 text-xs font-black uppercase text-amber-200 hover:bg-amber-500/30 disabled:opacity-60"
                     >
-                      {revertingOrderId === currentOrder.id ? "Revertendo..." : "Reverter reservas"}
+                      {revertingOrderId === currentOrder.id
+                        ? "Revertendo..."
+                        : currentOrder.hasGhostCounters && !currentOrder.hasActiveReservations
+                          ? "Limpar reserva pendente"
+                          : "Reverter reservas"}
                     </button>
                   )}
                 </div>
@@ -500,9 +489,9 @@ export default function OperatorDashboardPage() {
                       >{(() => {
                         const required = item.quantidade || 0;
                         const stockPhysical = item.kits?.estoque_atual || 0;
-                        const reserved = reservedForItem(item);
+                        const reserved = getDisplayReservedQty(item);
+                        const missing = getRemainingQty(item);
                         const availableForOrder = stockPhysical + reserved;
-                        const remaining = Math.max(0, required - availableForOrder);
                         return (
                           <>
                         <div className="flex items-center justify-between mb-2">
@@ -519,7 +508,10 @@ export default function OperatorDashboardPage() {
                             <p className="text-[10px] font-bold text-gray-500 uppercase">unidades</p>
                           </div>
                         </div>
-                        <div className="pt-2 border-t border-white/5">
+                        <div className="pt-2 border-t border-white/5 space-y-1">
+                          <p className="text-[10px] font-bold text-gray-400">
+                            Pedido: {required} | Reservado: {reserved} | Faltante: {missing}
+                          </p>
                           <p className="text-[10px] font-bold">
                             Estoque:{" "}
                             <span className={availableForOrder >= required ? "text-green-400" : "text-red-400"}>
@@ -610,7 +602,7 @@ export default function OperatorDashboardPage() {
                           style={{ width: `${order.stockPercentage || 0}%` }}
                         />
                       </div>
-                      {order.hasActiveReservations && (
+                      {canRevertReservations(order) && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -620,7 +612,11 @@ export default function OperatorDashboardPage() {
                           disabled={revertingOrderId === order.id}
                           className="mt-2 w-full rounded-xl bg-amber-500/20 border border-amber-300/40 px-2 py-1 text-[10px] font-black uppercase text-amber-200 hover:bg-amber-500/30 disabled:opacity-60"
                         >
-                          {revertingOrderId === order.id ? "Revertendo..." : "Reverter reserva"}
+                          {revertingOrderId === order.id
+                            ? "Revertendo..."
+                            : order.hasGhostCounters && !order.hasActiveReservations
+                              ? "Limpar pendência"
+                              : "Reverter reserva"}
                         </button>
                       )}
                     </div>

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Loader2, Camera, CheckCircle, ArrowLeft, Package, X, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getDisplayReservedQty } from "@/lib/order-reservations";
 
 export default function OrderCheckoutPage() {
   const { user } = useAuth();
@@ -20,14 +21,6 @@ export default function OrderCheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const getActiveReservedForItem = (item: any): number => {
-    const fromRows = (item.order_item_reservations || [])
-      .filter((r: any) => r.status === "active")
-      .reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
-    const fromCounter = Number(item.qty_reserved_total || 0);
-    return Math.max(fromRows, fromCounter);
-  };
 
   const handleSearchOrder = async () => {
     if (!orderCode.trim()) return;
@@ -80,7 +73,7 @@ export default function OrderCheckoutPage() {
       const missingKits: string[] = [];
       if (order.order_items && order.order_items.length > 0) {
         for (const item of order.order_items) {
-          const alreadyReserved = getActiveReservedForItem(item);
+          const alreadyReserved = getDisplayReservedQty(item);
           const pendingToConsume = Math.max(0, (item.quantidade || 0) - alreadyReserved);
           const requiredQty = item.quantidade || 0;
           const availableStock = item.kits?.estoque_atual || 0;

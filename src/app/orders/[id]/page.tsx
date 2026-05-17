@@ -7,6 +7,11 @@ import { Loader2, ArrowLeft, Package, User, Calendar, Star, X, Maximize2 } from 
 import Link from "next/link";
 import { formatDate } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
+import {
+  getDisplayReservedQty,
+  getRemainingQty,
+  orderHasActiveReservations,
+} from "@/lib/order-reservations";
 
 const RETURN_STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
 
@@ -42,7 +47,9 @@ function OrderDetailsInner() {
     setLoading(true);
     const { data, error } = await supabase
       .from("orders")
-      .select("*, order_items(quantidade, kit_id, kits(nome_kit, codigo_unico))")
+      .select(
+        "*, order_items(id, quantidade, kit_id, qty_reserved_total, order_item_reservations(id, qty_reserved, status), kits(nome_kit, codigo_unico))"
+      )
       .eq("id", orderId)
       .single();
 
@@ -83,6 +90,7 @@ function OrderDetailsInner() {
   }
 
   const hasPhoto = !!order.photo_url;
+  const hasReservation = orderHasActiveReservations(order.order_items || []);
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6">
@@ -108,6 +116,11 @@ function OrderDetailsInner() {
               {order.is_priority && (
                 <span className="text-[10px] font-black px-2 py-1 rounded-full bg-red-100 text-red-600 uppercase flex items-center gap-1">
                   <Star size={12} /> Prioritário
+                </span>
+              )}
+              {hasReservation && (
+                <span className="text-[10px] font-black px-2 py-1 rounded-full bg-amber-100 text-amber-700 uppercase">
+                  Reserva ativa
                 </span>
               )}
             </div>
@@ -136,16 +149,23 @@ function OrderDetailsInner() {
               <Package size={16} className="text-[#5D286C]" /> Itens do Pedido
             </h2>
             <div className="space-y-3">
-              {(order.order_items || []).map((item: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center bg-gray-50 rounded-2xl px-4 py-3">
-                  <div className="flex flex-col">
+              {(order.order_items || []).map((item: any, idx: number) => {
+                const reserved = getDisplayReservedQty(item);
+                const missing = getRemainingQty(item);
+                return (
+                <div key={idx} className="flex justify-between items-center bg-gray-50 rounded-2xl px-4 py-3 gap-3">
+                  <div className="flex flex-col min-w-0">
                     <span className="text-xs font-black text-gray-700">
                       {item.kits?.codigo_unico} - {item.kits?.nome_kit}
                     </span>
+                    <span className="text-[10px] font-bold text-gray-500 mt-1">
+                      Pedido: {item.quantidade} | Reservado: {reserved} | Faltante: {missing}
+                    </span>
                   </div>
-                  <span className="text-xs font-black text-[#5D286C]">{item.quantidade} un.</span>
+                  <span className="text-xs font-black text-[#5D286C] shrink-0">{item.quantidade} un.</span>
                 </div>
-              ))}
+              );
+              })}
               {(!order.order_items || order.order_items.length === 0) && (
                 <p className="text-center text-gray-400 text-sm font-bold">Nenhum item encontrado para este pedido.</p>
               )}

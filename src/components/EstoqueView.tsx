@@ -7,6 +7,12 @@ import {
   ArrowDownWideNarrow, ArrowUpWideNarrow,
   Calculator, X, CheckCircle, AlertTriangle, ChevronRight, Search,
 } from "lucide-react";
+import {
+  getDisplayReservedQty,
+  getRemainingQty,
+  sumOrderReserved,
+  sumOrderRemaining,
+} from "@/lib/order-reservations";
 
 type SortMode = "nome" | "estoque_asc" | "estoque_desc";
 
@@ -14,13 +20,22 @@ type PendingOrder = {
   id: number;
   codigo_unico: string;
   cliente: string;
-  order_items: { quantidade: number; kit_id: number; kits: { nome_kit: string } | null }[];
+  order_items: {
+    id?: number;
+    quantidade: number;
+    kit_id: number;
+    qty_reserved_total?: number;
+    order_item_reservations?: { id: number; qty_reserved: number; status: string }[];
+    kits: { nome_kit: string } | null;
+  }[];
 };
 
 type KitSummaryItem = {
   kitId: number;
   nome: string;
   needed: number;
+  reserved: number;
+  missing: number;
   inStock: number;
   toAssemble: number;
 };
@@ -92,7 +107,9 @@ export default function EstoqueView() {
     try {
       const { data } = await supabase
         .from("orders")
-        .select("id, codigo_unico, cliente, order_items(quantidade, kit_id, kits(nome_kit))")
+        .select(
+          "id, codigo_unico, cliente, order_items(id, quantidade, kit_id, qty_reserved_total, order_item_reservations(id, qty_reserved, status), kits(nome_kit))"
+        )
         .eq("status", "Pendente")
         .order("codigo_unico", { ascending: true });
       setPendingOrders((data as unknown as PendingOrder[]) || []);
@@ -153,15 +170,19 @@ export default function EstoqueView() {
     try {
       const selected = pendingOrders.filter((o) => selectedOrderIds.has(o.id));
 
-      // 1. Agregar kits necessários
-      const kitNeeded = new Map<number, { nome: string; needed: number }>();
+      // 1. Agregar kits (necessário, reservado, faltante)
+      const kitNeeded = new Map<number, { nome: string; needed: number; reserved: number; missing: number }>();
       for (const order of selected) {
         for (const item of order.order_items) {
           const prev = kitNeeded.get(item.kit_id) || {
             nome: item.kits?.nome_kit || `Kit #${item.kit_id}`,
             needed: 0,
+            reserved: 0,
+            missing: 0,
           };
           prev.needed += item.quantidade;
+          prev.reserved += getDisplayReservedQty(item);
+          prev.missing += getRemainingQty(item);
           kitNeeded.set(item.kit_id, prev);
         }
       }
@@ -186,10 +207,10 @@ export default function EstoqueView() {
       const kitSummary: KitSummaryItem[] = [];
       const kitsToAssemble: number[] = [];
 
-      for (const [kitId, { nome, needed }] of kitNeeded.entries()) {
+      for (const [kitId, { nome, needed, reserved, missing }] of kitNeeded.entries()) {
         const inStock = kitStockMap.get(kitId) || 0;
-        const toAssemble = Math.max(0, needed - inStock);
-        kitSummary.push({ kitId, nome, needed, inStock, toAssemble });
+        const toAssemble = Math.max(0, missing - inStock);
+        kitSummary.push({ kitId, nome, needed, reserved, missing, inStock, toAssemble });
         if (toAssemble > 0) kitsToAssemble.push(kitId);
       }
 
@@ -479,6 +500,8 @@ export default function EstoqueView() {
                       {visiblePendingOrders.map((order) => {
                         const selected = selectedOrderIds.has(order.id);
                         const totalKits = order.order_items.reduce((a, i) => a + i.quantidade, 0);
+                        const reservedKits = sumOrderReserved(order.order_items);
+                        const missingKits = sumOrderRemaining(order.order_items);
                         return (
                           <div
                             key={order.id}
@@ -502,7 +525,10 @@ export default function EstoqueView() {
                             </div>
                             <div className="text-right shrink-0">
                               <p className="text-sm font-black text-[#5D286C]">{totalKits}</p>
-                              <p className="text-[10px] font-bold text-gray-400 uppercase">kits</p>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">pedido</p>
+                              <p className="text-[10px] font-bold text-amber-600">
+                                Rsv {reservedKits} · Falta {missingKits}
+                              </p>
                             </div>
                           </div>
                         );
@@ -542,6 +568,8 @@ export default function EstoqueView() {
                           <tr className="text-left text-[10px] font-black uppercase text-gray-400">
                             <th className="p-3">Kit</th>
                             <th className="p-3 text-right">Necessário</th>
+                            <th className="p-3 text-right">Reservado</th>
+                            <th className="p-3 text-right">Faltante</th>
                             <th className="p-3 text-right">Em estoque</th>
                             <th className="p-3 text-right">Montar</th>
                           </tr>
@@ -556,6 +584,8 @@ export default function EstoqueView() {
                             >
                               <td className="p-3">{k.nome}</td>
                               <td className="p-3 text-right">{k.needed}</td>
+                              <td className="p-3 text-right">{k.reserved}</td>
+                              <td className="p-3 text-right">{k.missing}</td>
                               <td className="p-3 text-right">{k.inStock}</td>
                               <td className="p-3 text-right font-black">
                                 {k.toAssemble > 0 ? (

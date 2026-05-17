@@ -6,9 +6,12 @@ import { useToast } from "@/lib/toast-context";
 import { ShoppingCart, Plus, Trash2, Save, ArrowLeft, Calendar, User, Hash, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { orderHasActiveReservations, revertOrderReservations } from "@/lib/order-reservations";
 
 export default function EditOrderPage() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
   const orderId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
@@ -20,6 +23,7 @@ export default function EditOrderPage() {
   const [currentKitSelection, setCurrentKitSelection] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasActiveReservations, setHasActiveReservations] = useState(false);
 
   useEffect(() => {
     if (orderId) {
@@ -39,7 +43,9 @@ export default function EditOrderPage() {
     try {
       const { data: order, error } = await supabase
         .from("orders")
-        .select("*, order_items(quantidade, kit_id)")
+        .select(
+          "*, order_items(id, quantidade, kit_id, qty_reserved_total, order_item_reservations(id, qty_reserved, status))"
+        )
         .eq("id", orderId)
         .single();
 
@@ -51,6 +57,8 @@ export default function EditOrderPage() {
         deliveryDate: order.data_entrega || '',
         notes: order.notes || ''
       });
+
+      setHasActiveReservations(orderHasActiveReservations(order.order_items || []));
 
       setSelectedKits(
         order.order_items?.map((item: any) => ({
@@ -99,6 +107,15 @@ export default function EditOrderPage() {
 
       if (orderErr) throw orderErr;
 
+      if (user) {
+        await revertOrderReservations(
+          parseInt(orderId, 10),
+          orderData.code,
+          "Reversão automática por edição do pedido",
+          user.id
+        );
+      }
+
       // 2. Deletar itens antigos
       await supabase.from("order_items").delete().eq("order_id", orderId);
 
@@ -139,6 +156,11 @@ export default function EditOrderPage() {
       </div>
 
       <form onSubmit={handleSaveOrder} className="space-y-6">
+        {hasActiveReservations && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+            Este pedido possui reserva ativa. Ao salvar, as reservas serão revertidas e o estoque devolvido.
+          </div>
+        )}
         {/* Informações Básicas */}
         <div className="bg-white p-8 rounded-[2.5rem] border-2 border-gray-50 shadow-sm space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
