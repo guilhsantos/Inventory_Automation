@@ -152,17 +152,52 @@ function OrderDetailsInner() {
               {(order.order_items || []).map((item: any, idx: number) => {
                 const reserved = getDisplayReservedQty(item);
                 const missing = getRemainingQty(item);
+                const fullyReserved = reserved > 0 && missing === 0;
+                const partiallyReserved = reserved > 0 && missing > 0;
                 return (
-                <div key={idx} className="flex justify-between items-center bg-gray-50 rounded-2xl px-4 py-3 gap-3">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-black text-gray-700">
-                      {item.kits?.codigo_unico} - {item.kits?.nome_kit}
-                    </span>
-                    <span className="text-[10px] font-bold text-gray-500 mt-1">
-                      Pedido: {item.quantidade} | Reservado: {reserved} | Faltante: {missing}
+                <div
+                  key={idx}
+                  className={`flex justify-between items-start rounded-2xl px-4 py-3 gap-3 border ${
+                    fullyReserved
+                      ? "bg-amber-50 border-amber-200"
+                      : partiallyReserved
+                        ? "bg-amber-50/50 border-amber-100"
+                        : "bg-gray-50 border-transparent"
+                  }`}
+                >
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black text-gray-700">
+                        {item.kits?.codigo_unico} - {item.kits?.nome_kit}
+                      </span>
+                      {fullyReserved && (
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-800">
+                          Reservado
+                        </span>
+                      )}
+                      {partiallyReserved && (
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                          Parcial
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-500 mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                      <span>Pedido: {item.quantidade}</span>
+                      <span className={reserved > 0 ? "text-amber-700 font-black" : ""}>
+                        Reservado: {reserved}
+                      </span>
+                      <span className={missing > 0 ? "text-red-600 font-black" : "text-green-600"}>
+                        Faltante: {missing}
+                      </span>
                     </span>
                   </div>
-                  <span className="text-xs font-black text-[#5D286C] shrink-0">{item.quantidade} un.</span>
+                  <span
+                    className={`text-xs font-black shrink-0 ${
+                      reserved > 0 ? "text-amber-700" : "text-[#5D286C]"
+                    }`}
+                  >
+                    {item.quantidade} un.
+                  </span>
                 </div>
               );
               })}
