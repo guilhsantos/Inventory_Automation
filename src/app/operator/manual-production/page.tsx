@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Hammer, Box, Save, ArrowLeft, Cpu, AlertTriangle, X } from "lucide-react";
@@ -41,6 +41,11 @@ export default function ManualProductionPage() {
   const [selectedMaterial, setSelectedMaterial] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [bagsUsed, setBagsUsed] = useState<string>("");
+  const [observacao, setObservacao] = useState<string>("");
+
+  const submittingRef = useRef(false);
+  // Identifica este lançamento: reenvios/duplo clique não contam a produção duas vezes
+  const requestIdRef = useRef<string>(crypto.randomUUID());
 
   useEffect(() => {
     let cancelled = false;
@@ -99,64 +104,42 @@ export default function ManualProductionPage() {
       return;
     }
 
-    setIsSubmitting(true);
     const qtyInt = parseInt(quantity);
-    const bagsInt = parseInt(bagsUsed || "0");
-    const materialConsumed = bagsInt * 25; // 25kg por saco
+    if (!Number.isFinite(qtyInt) || qtyInt <= 0) {
+      showToast("A quantidade produzida deve ser maior que zero.", "error");
+      return;
+    }
+    // Trava síncrona: o estado do React só desabilita o botão no próximo render
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
 
     try {
-      // 1. Buscar material selecionado e verificar estoque
-      const { data: material, error: materialError } = await supabase
-        .from("materials")
-        .select("id, nome, estoque_kg")
-        .eq("id", parseInt(selectedMaterial))
-        .single();
+      // Peça + material + registro numa única transação no banco (tudo ou nada)
+      const { error: rpcError } = await supabase.rpc("register_production", {
+        p_machine_id: parseInt(selectedMachine),
+        p_molde_id: parseInt(selectedMolde),
+        p_material_id: parseInt(selectedMaterial),
+        p_quantidade: qtyInt,
+        p_sacos: parseInt(bagsUsed || "0"),
+        p_observacao: observacao.trim() || null,
+        p_request_id: requestIdRef.current,
+      });
 
-      if (materialError) throw materialError;
-      if (!material) throw new Error("Material não encontrado");
-
-      const availableMaterial = material.estoque_kg || 0;
-
-      // 2. Validar se há material suficiente
-      if (availableMaterial < materialConsumed) {
-        const missing = materialConsumed - availableMaterial;
-        const errorMsg = `Material insuficiente.\n\n${material.nome}\nDisponível: ${availableMaterial} kg\nNecessário: ${materialConsumed} kg\nFaltam: ${missing} kg`;
-        setValidationError(errorMsg);
-        setIsSubmitting(false);
-        return;
+      if (rpcError) {
+        if (rpcError.message.startsWith("Material insuficiente")) {
+          setValidationError(rpcError.message);
+          return;
+        }
+        throw rpcError;
       }
-
-      // 3. Se tiver material suficiente, processar produção
-      await supabase.rpc('increment_molde_stock', {
-        row_id: parseInt(selectedMolde),
-        amount: qtyInt
-      });
-
-      // Descontar material do material selecionado
-      const newMaterialStock = availableMaterial - materialConsumed;
-      const { error: materialUpdateError } = await supabase
-        .from("materials")
-        .update({ estoque_kg: newMaterialStock })
-        .eq("id", parseInt(selectedMaterial));
-
-      if (materialUpdateError) throw materialUpdateError;
-
-      const { error: logError } = await supabase.from("daily_production").insert({
-        molde_id: parseInt(selectedMolde),
-        machine_id: parseInt(selectedMachine),
-        usuario_id: user.id,
-        quantidade_boa: qtyInt,
-        sacos_usados: bagsInt,
-        material_id: parseInt(selectedMaterial),
-      });
-
-      if (logError) throw logError;
 
       showToast("Produção registrada com sucesso!");
       router.push("/operator/production");
     } catch (err: any) {
       showToast(`Erro ao registrar: ${err.message}`, "error");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -273,6 +256,17 @@ export default function ManualProductionPage() {
               Total necessário: {parseInt(bagsUsed || "0") * 25} kg
             </p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-black text-gray-400 uppercase ml-2">Observação (opcional)</label>
+          <textarea
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+            maxLength={500}
+            placeholder="Ex: troca de material no meio do lote"
+            className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#5D286C] focus:bg-white rounded-2xl font-bold outline-none transition-all min-h-[100px]"
+          />
         </div>
 
         <button

@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Loader2, Camera, CheckCircle, ArrowLeft, Package, X, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getDisplayReservedQty } from "@/lib/order-reservations";
+import { adjustKitStock, getDisplayReservedQty } from "@/lib/order-reservations";
 
 export default function OrderCheckoutPage() {
   const { user } = useAuth();
@@ -128,16 +128,8 @@ export default function OrderCheckoutPage() {
         const reservedQty = activeReservations.reduce((sum: number, r: any) => sum + (r.qty_reserved || 0), 0);
         const qtyNeeded = Number(item.quantidade || 0);
         const pendingToConsume = Math.max(0, qtyNeeded - reservedQty);
-        const currentStock = item.kits?.estoque_atual ?? 0;
-        const newStock = Math.max(0, currentStock - pendingToConsume);
-
         if (pendingToConsume > 0) {
-          const { error: kitError } = await supabase
-            .from("kits")
-            .update({ estoque_atual: newStock })
-            .eq("id", item.kit_id);
-
-          if (kitError) throw kitError;
+          await adjustKitStock(item.kit_id, -pendingToConsume);
         }
 
         for (const reservation of activeReservations) {

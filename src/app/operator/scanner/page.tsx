@@ -26,6 +26,9 @@ export default function ScannerPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [kitQty, setKitQty] = useState("1");
   const inputRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false);
+  // Identifica o envio: um duplo clique em "Confirmar" não registra os kits duas vezes
+  const requestIdRef = useRef<string>("");
   const { showToast } = useToast();
 
   const audioSuccess = useRef<HTMLAudioElement | null>(null);
@@ -87,6 +90,7 @@ export default function ScannerPage() {
         throw new Error(dbError.message);
       }
       if (data) {
+        requestIdRef.current = crypto.randomUUID();
         setItemInfo({ id: data.id, nome: data.nome_kit, qtd: data.estoque_atual });
         playSuccess();
       }
@@ -99,72 +103,29 @@ export default function ScannerPage() {
   };
 
   const confirmarProducao = async () => {
-    if (!itemInfo || !user) return;
+    if (!itemInfo || !user || processingRef.current) return;
     const n = Math.min(9999, Math.max(1, Math.floor(Number(kitQty)) || 1));
     if (n !== Number(kitQty)) {
       setKitQty(String(n));
     }
+    processingRef.current = true;
     setIsProcessing(true);
     try {
-      const { data: kitItems, error: kitItemsError } = await supabase
-        .from("kit_items")
-        .select("molde_id, quantidade, moldes(nome, estoque_atual)")
-        .eq("kit_id", itemInfo.id);
-
-      if (kitItemsError) throw kitItemsError;
-
-      const missingParts: string[] = [];
-      if (kitItems && kitItems.length > 0) {
-        for (const item of kitItems) {
-          const molde = item.moldes as any;
-          const perKit = item.quantidade || 0;
-          const requiredQty = perKit * n;
-          const availableQty = molde?.estoque_atual || 0;
-
-          if (availableQty < requiredQty) {
-            const missing = requiredQty - availableQty;
-            missingParts.push(`${molde?.nome || "Peça desconhecida"}\nFaltam: ${missing} unidade(s) (${n} kit(s))`);
-          }
-        }
-      }
-
-      if (missingParts.length > 0) {
-        playError();
-        const errorMsg = `Não há peças avulsas suficientes para produzir ${n} kit(s).\n\nFaltam:\n${missingParts.join("\n")}`;
-        setValidationError(errorMsg);
-        setIsProcessing(false);
-        return;
-      }
-
-      if (kitItems && kitItems.length > 0) {
-        for (const item of kitItems) {
-          const molde = item.moldes as any;
-          const deduct = (item.quantidade || 0) * n;
-          const currentStock = molde?.estoque_atual || 0;
-          const newStock = currentStock - deduct;
-
-          const { error: moldeError } = await supabase
-            .from("moldes")
-            .update({ estoque_atual: newStock })
-            .eq("id", item.molde_id);
-
-          if (moldeError) throw moldeError;
-        }
-      }
-
-      const { error: updateError } = await supabase
-        .from("kits")
-        .update({ estoque_atual: itemInfo.qtd + n })
-        .eq("id", itemInfo.id);
-      if (updateError) throw updateError;
-
-      await supabase.from("stock_movements").insert({
-        kit_id: itemInfo.id,
-        user_id: user.id,
-        type: "IN",
-        quantity: n,
-        notes: `Entrada via scanner (${n} kit(s))`,
+      // Desconto das peças + entrada do kit + movimentação numa única transação no banco
+      const { error: rpcError } = await supabase.rpc("assemble_kit", {
+        p_kit_id: itemInfo.id,
+        p_quantidade: n,
+        p_request_id: requestIdRef.current,
       });
+
+      if (rpcError) {
+        if (rpcError.message.startsWith("Não há peças avulsas suficientes")) {
+          playError();
+          setValidationError(rpcError.message);
+          return;
+        }
+        throw rpcError;
+      }
 
       playSuccess();
       setScanResult(null);
@@ -175,6 +136,7 @@ export default function ScannerPage() {
       playError();
       showToast(`Erro: ${err.message}`, "error");
     } finally {
+      processingRef.current = false;
       setIsProcessing(false);
     }
   };

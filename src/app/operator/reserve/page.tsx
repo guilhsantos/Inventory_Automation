@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast-context";
+import { adjustKitStock } from "@/lib/order-reservations";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Archive, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
@@ -170,14 +171,9 @@ export default function ReserveOrderPage() {
     try {
       for (const p of payload) {
         const item = p.item;
-        const currentStock = item.kits?.estoque_atual || 0;
         const qty = p.qty;
 
-        const { error: kitError } = await supabase
-          .from("kits")
-          .update({ estoque_atual: Math.max(0, currentStock - qty) })
-          .eq("id", item.kit_id);
-        if (kitError) throw kitError;
+        await adjustKitStock(item.kit_id, -qty);
 
         const { data: reservationRow, error: reservationError } = await supabase
           .from("order_item_reservations")

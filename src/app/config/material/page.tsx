@@ -124,21 +124,16 @@ export default function MaterialConfigPage() {
     
     setIsSubmitting(true);
     const qtyNum = parseFloat(addQty);
-    const material = materials.find(m => m.id === parseInt(selectedMatId));
 
     try {
-      const { error: updateError } = await supabase
-        .from("materials")
-        .update({ estoque_kg: (material?.estoque_kg || 0) + qtyNum })
-        .eq("id", selectedMatId);
-
-      if (updateError) throw updateError;
-
-      await supabase.from("material_entries").insert({
-        material_id: selectedMatId,
-        quantidade_kg: qtyNum,
-        data_chegada: arrivalDate
+      // Soma relativa ao saldo atual + registro da entrada, numa transação no banco
+      const { error: entryError } = await supabase.rpc("register_material_entry", {
+        p_material_id: parseInt(selectedMatId),
+        p_kg: qtyNum,
+        p_data_chegada: arrivalDate,
       });
+
+      if (entryError) throw entryError;
 
       showToast("Entrada de estoque salva!");
       setSelectedMatId("");
