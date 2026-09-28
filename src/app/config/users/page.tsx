@@ -52,20 +52,36 @@ export default function UsersConfigPage() {
         { auth: { persistSession: false } }
       );
 
-      const { error } = await tempSupabase.auth.signUp({
+      const { data: signUpData, error } = await tempSupabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        options: { 
-          data: { 
-            full_name: newUser.full_name, 
-            role: newUser.role 
-          } 
+        options: {
+          data: {
+            full_name: newUser.full_name,
+            role: newUser.role
+          }
         }
       });
 
       if (error) throw error;
-      
-      showToast("Acesso industrial criado com sucesso!");
+
+      // O banco ignora o role do signUp (todo perfil nasce OP_ESTOQUE);
+      // o papel escolhido é gravado aqui, com a sessão do admin.
+      const newUserId = signUpData.user?.id;
+      const { data: updated, error: roleError } = newUserId
+        ? await supabase
+            .from("profiles")
+            .update({ full_name: newUser.full_name, role: newUser.role })
+            .eq("id", newUserId)
+            .select("id")
+        : { data: [], error: null };
+
+      if (roleError) throw roleError;
+      if (!updated || updated.length === 0) {
+        showToast("Usuário criado, mas o perfil não foi encontrado. Confira a função dele na edição.", "error");
+      } else {
+        showToast("Acesso industrial criado com sucesso!");
+      }
       setIsCreateModalOpen(false);
       setNewUser({ email: '', password: '', full_name: '', role: 'OP_ESTOQUE' });
       setTimeout(fetchUsers, 1500);
