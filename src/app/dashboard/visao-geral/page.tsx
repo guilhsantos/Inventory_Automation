@@ -16,6 +16,9 @@ import {
 import Link from "next/link";
 import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
+import { fetchMachineStates, MachineState } from "@/lib/machines";
+import MachinesPanel, { ProductionRow } from "@/components/dashboard/MachinesPanel";
+import MaterialStockPanel, { MaterialStock } from "@/components/dashboard/MaterialStockPanel";
 
 const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
 const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
@@ -59,6 +62,9 @@ export default function VisaoGeralPage() {
   });
   const [ordersChartData, setOrdersChartData] = useState<any[]>([]);
   const [criticalOrders, setCriticalOrders] = useState<any[]>([]);
+  const [machines, setMachines] = useState<MachineState[]>([]);
+  const [production, setProduction] = useState<ProductionRow[]>([]);
+  const [materials, setMaterials] = useState<MaterialStock[]>([]);
   const [seriesVisible, setSeriesVisible] = useState({
     criados: true,
     concluidos: true,
@@ -92,6 +98,22 @@ export default function VisaoGeralPage() {
       ]);
 
       const { startIso, endIso } = brDayRangeIso(startDate, endDate);
+
+      const [machinesRes, productionRes, materialsRes] = await Promise.all([
+        fetchMachineStates().catch((error) => {
+          console.error("Erro ao carregar máquinas:", error);
+          return [] as MachineState[];
+        }),
+        supabase
+          .from("daily_production")
+          .select("machine_id, molde_id, quantidade_boa, created_at, moldes(nome)")
+          .gte("created_at", startIso)
+          .lte("created_at", endIso),
+        supabase.from("materials").select("id, nome, estoque_kg").order("nome"),
+      ]);
+      setMachines(machinesRes);
+      setProduction((productionRes.data as unknown as ProductionRow[]) || []);
+      setMaterials((materialsRes.data as MaterialStock[]) || []);
 
       const [criadosRes, conclRes, entRes] = await Promise.all([
         supabase.from("orders").select("created_at").gte("created_at", startIso).lte("created_at", endIso),
@@ -200,12 +222,39 @@ export default function VisaoGeralPage() {
             Operação ReautoCar Intelligence
           </p>
         </div>
-        <button
-          onClick={fetchData}
-          className="bg-white border-2 border-gray-100 p-4 rounded-2xl font-black text-xs hover:border-[#5D286C] transition-all flex items-center gap-2"
-        >
-          <Activity size={16} /> ATUALIZAR
-        </button>
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:items-center">
+          <div className="flex items-center gap-2">
+            <Calendar size={16} className="text-gray-400" />
+            <label className="text-xs font-black text-gray-400 uppercase whitespace-nowrap">Inicial</label>
+            <input
+              type="date"
+              lang="pt-BR"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              max={endDate}
+              className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar size={16} className="text-gray-400" />
+            <label className="text-xs font-black text-gray-400 uppercase whitespace-nowrap">Final</label>
+            <input
+              type="date"
+              lang="pt-BR"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate}
+              max={todayYmdBr()}
+              className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm bg-white"
+            />
+          </div>
+          <button
+            onClick={fetchData}
+            className="px-4 py-3 bg-[#5D286C] text-white rounded-2xl text-xs font-black hover:bg-[#7B1470] transition-colors flex items-center justify-center gap-2"
+          >
+            <Activity size={16} /> FILTRAR
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -215,6 +264,13 @@ export default function VisaoGeralPage() {
         <StatCard title="Pendentes" value={stats.pendingOrders} icon={<Clock />} color="text-purple-600" />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2 min-w-0">
+          <MachinesPanel machines={machines} production={production} />
+        </div>
+        <MaterialStockPanel materials={materials} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] gap-6 items-start">
         <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 min-w-0">
           <div className="flex flex-col gap-4 mb-6">
@@ -222,41 +278,6 @@ export default function VisaoGeralPage() {
             <p className="text-[10px] font-bold text-gray-400 uppercase">
               Criados = novos pedidos no dia · Concluídos / Entregues = quando foram marcados (concluido_em / entregue_em)
             </p>
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-center justify-between">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex items-center gap-2">
-                  <Calendar size={16} className="text-gray-400" />
-                  <label className="text-xs font-black text-gray-400 uppercase whitespace-nowrap">Inicial</label>
-                  <input
-                    type="date"
-                    lang="pt-BR"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    max={endDate}
-                    className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar size={16} className="text-gray-400" />
-                  <label className="text-xs font-black text-gray-400 uppercase whitespace-nowrap">Final</label>
-                  <input
-                    type="date"
-                    lang="pt-BR"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate}
-                    max={todayYmdBr()}
-                    className="px-3 py-2 rounded-2xl border-2 border-gray-100 focus:border-[#5D286C] outline-none font-bold text-sm"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={fetchData}
-                className="px-4 py-2 bg-[#5D286C] text-white rounded-2xl text-xs font-black hover:bg-[#7B1470] transition-colors"
-              >
-                FILTRAR
-              </button>
-            </div>
             <div className="flex flex-wrap gap-2">
               {(
                 [
