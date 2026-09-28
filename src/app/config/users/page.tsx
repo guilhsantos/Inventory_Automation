@@ -30,6 +30,7 @@ export default function UsersConfigPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
+      .is("excluido_em", null)
       .order("email", { ascending: true });
     
     if (error) {
@@ -98,14 +99,14 @@ export default function UsersConfigPage() {
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
     try {
-      // Chama a função RPC que apaga o LOGIN (auth.users) e o PERFIL (public.profiles)
-      const { error } = await supabase.rpc('delete_user_entirely', { 
-        user_id_to_delete: userToDelete.id 
+      // Apaga o LOGIN (auth.users); o perfil fica guardado só para o histórico de produção
+      const { error } = await supabase.rpc("delete_user_keep_history", {
+        p_user_id: userToDelete.id,
       });
 
       if (error) throw error;
 
-      showToast("Login e perfil removidos permanentemente.");
+      showToast("Usuário excluído. O histórico de produção foi mantido.");
       setUserToDelete(null);
       fetchUsers();
     } catch (err: any) {
@@ -231,7 +232,7 @@ export default function UsersConfigPage() {
         onClose={() => setUserToDelete(null)}
         onConfirm={handleDeleteUser}
         title="Excluir Definitivamente"
-        message={`Deseja remover ${userToDelete?.email}? Isso apagará o login e o perfil permanentemente.`}
+        message={`Deseja excluir ${userToDelete?.full_name || userToDelete?.email}? O acesso será removido permanentemente, mas o histórico de produção, defeitos e movimentações será mantido.`}
       />
     </div>
   );
