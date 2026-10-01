@@ -4,9 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
-import { AlertTriangle, Save, ArrowLeft, Loader2, Hammer, X } from "lucide-react";
+import { AlertTriangle, Save, ArrowLeft, Loader2, Hammer, X, Cpu, Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/date-utils";
+
+type LastMachine =
+  | { state: "idle" | "loading" | "none" | "error" }
+  | { state: "found"; nome: string; at: string };
 
 export default function DefectsPage() {
   const { user } = useAuth();
@@ -14,36 +19,66 @@ export default function DefectsPage() {
   const router = useRouter();
   
   const [moldes, setMoldes] = useState<any[]>([]);
-  const [machines, setMachines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Máquina do defeito = última que produziu o molde (o banco aplica a mesma regra)
+  const [lastMachine, setLastMachine] = useState<LastMachine>({ state: "idle" });
 
   const [formData, setFormData] = useState({
     molde_id: "",
     quantity: "",
     reason: "",
-    machine_id: ""
   });
 
   useEffect(() => {
     async function fetchData() {
-      const [moldesRes, machinesRes] = await Promise.all([
-        supabase.from("moldes").select("id, nome").order("nome"),
-        supabase.from("machines").select("id, nome").order("nome")
-      ]);
-      if (moldesRes.data) setMoldes(moldesRes.data);
-      if (machinesRes.data) setMachines(machinesRes.data);
+      const { data } = await supabase.from("moldes").select("id, nome").order("nome");
+      if (data) setMoldes(data);
       setLoading(false);
     }
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!formData.molde_id) {
+      setLastMachine({ state: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setLastMachine({ state: "loading" });
+    supabase
+      .from("daily_production")
+      .select("machine_id, created_at, machines(nome)")
+      .eq("molde_id", parseInt(formData.molde_id))
+      .not("machine_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setLastMachine({ state: "error" });
+        } else if (!data) {
+          setLastMachine({ state: "none" });
+        } else {
+          const machine = data.machines as unknown as { nome: string } | null;
+          setLastMachine({ state: "found", nome: machine?.nome ?? `Máquina #${data.machine_id}`, at: data.created_at });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.molde_id]);
+
   const handleSaveDefect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.molde_id || !formData.quantity || !formData.machine_id) {
-      return showToast("Preencha a peça, quantidade e máquina.", "error");
+    if (!formData.molde_id || !formData.quantity) {
+      return showToast("Preencha a peça e a quantidade.", "error");
+    }
+    if (lastMachine.state !== "found") {
+      return showToast("Este molde ainda não teve produção registrada.", "error");
     }
 
     if (submittingRef.current) return;
@@ -53,7 +88,7 @@ export default function DefectsPage() {
       // Registro do defeito + desconto da peça numa única transação no banco
       const { error: rpcError } = await supabase.rpc("register_defect", {
         p_molde_id: parseInt(formData.molde_id),
-        p_machine_id: parseInt(formData.machine_id),
+        p_machine_id: null, // definida no banco pela última produção do molde
         p_quantidade: parseInt(formData.quantity),
         p_motivo: formData.reason || null,
       });
@@ -107,20 +142,33 @@ export default function DefectsPage() {
           </select>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2">
-            Máquina (Obrigatório)
-          </label>
-          <select 
-            required
-            value={formData.machine_id}
-            onChange={e => setFormData({...formData, machine_id: e.target.value})}
-            className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#5D286C] appearance-none"
-          >
-            <option value="">Selecione a máquina...</option>
-            {machines.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-          </select>
-        </div>
+        {lastMachine.state !== "idle" && (
+          <div className="space-y-2">
+            <label className="text-xs font-black text-gray-400 uppercase ml-2 flex items-center gap-2">
+              <Cpu size={14} /> Máquina (última que produziu este molde)
+            </label>
+            {lastMachine.state === "loading" ? (
+              <div className="w-full p-4 bg-gray-50 rounded-2xl flex items-center gap-2 text-gray-400 font-bold">
+                <Loader2 className="animate-spin" size={16} /> Buscando máquina...
+              </div>
+            ) : lastMachine.state === "found" ? (
+              <div className="w-full p-4 bg-purple-50 border-2 border-purple-100 rounded-2xl flex items-center gap-2">
+                <Lock size={14} className="text-[#5D286C] shrink-0" />
+                <span className="font-black text-[#5D286C] truncate">{lastMachine.nome}</span>
+                <span className="ml-auto text-[10px] font-bold text-gray-400 uppercase shrink-0">
+                  {formatDateTime(lastMachine.at)}
+                </span>
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-amber-800 text-sm font-bold flex items-start gap-2">
+                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                {lastMachine.state === "none"
+                  ? "Este molde ainda não teve produção registrada. Não é possível registrar defeito."
+                  : "Não foi possível buscar a máquina. Tente novamente."}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="text-xs font-black text-gray-400 uppercase ml-2">Quantidade com Defeito</label>
@@ -146,7 +194,7 @@ export default function DefectsPage() {
 
         <button 
           type="submit" 
-          disabled={isSubmitting}
+          disabled={isSubmitting || lastMachine.state !== "found"}
           className="w-full bg-red-500 text-white p-6 rounded-3xl font-black text-xl shadow-xl hover:bg-red-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
         >
           {isSubmitting ? <Loader2 className="animate-spin" /> : <><Save size={24} /> SALVAR DEFEITO</>}

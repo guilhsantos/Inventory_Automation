@@ -24,7 +24,7 @@ import {
   ArrowDownWideNarrow,
   ArrowUpWideNarrow,
 } from "lucide-react";
-import { formatDate } from "@/lib/date-utils";
+import { formatDate, todayYmdBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 import { useAuth } from "@/lib/auth-context";
 import { adjustKitStock, revertOrderReservations } from "@/lib/order-reservations";
@@ -48,7 +48,7 @@ function OrdersListContent() {
   const [codeSortDesc, setCodeSortDesc] = useState(false);
   const [priorityModal, setPriorityModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [backToPendingModal, setBackToPendingModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
-  const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string }>({ isOpen: false, order: null, invoice: "" });
+  const [invoiceModal, setInvoiceModal] = useState<{ isOpen: boolean; order: any | null; invoice: string; faturadoEm: string }>({ isOpen: false, order: null, invoice: "", faturadoEm: "" });
   const [revertDeliveredModal, setRevertDeliveredModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; order: any | null }>({ isOpen: false, order: null });
 
@@ -178,7 +178,7 @@ function OrdersListContent() {
 
   const handleDeliverOrder = async (order: any) => {
     if (order.status !== "Concluído") return;
-    setInvoiceModal({ isOpen: true, order, invoice: order.invoice_number || "" });
+    setInvoiceModal({ isOpen: true, order, invoice: order.invoice_number || "", faturadoEm: order.faturado_em || "" });
   };
 
   const handleConfirmDeliverOrder = async () => {
@@ -189,6 +189,16 @@ function OrdersListContent() {
       showToast("Nota fiscal é obrigatória para entregar o pedido.", "error");
       return;
     }
+    const faturadoEm = invoiceModal.faturadoEm;
+    if (!faturadoEm) {
+      showToast("Data de faturamento é obrigatória para entregar o pedido.", "error");
+      return;
+    }
+    // Faturamento acontece antes (ou no mesmo dia) da entrega
+    if (faturadoEm > todayYmdBr()) {
+      showToast("A data de faturamento não pode ser depois de hoje.", "error");
+      return;
+    }
 
     try {
       const entregueEm = new Date().toISOString();
@@ -197,6 +207,7 @@ function OrdersListContent() {
         .update({
           status: "Entregue",
           invoice_number: invoice,
+          faturado_em: faturadoEm,
           entregue_em: entregueEm,
         })
         .eq("id", invoiceModal.order.id)
@@ -206,13 +217,13 @@ function OrdersListContent() {
       if (error) throw error;
       if (!updated?.entregue_em) {
         showToast("A entrega foi registrada, mas entregue_em não retornou do servidor. Verifique políticas RLS ou a coluna no banco.", "error");
-        setInvoiceModal({ isOpen: false, order: null, invoice: "" });
+        setInvoiceModal({ isOpen: false, order: null, invoice: "", faturadoEm: "" });
         await fetchOrders();
         return;
       }
 
       showToast("Pedido marcado como entregue!");
-      setInvoiceModal({ isOpen: false, order: null, invoice: "" });
+      setInvoiceModal({ isOpen: false, order: null, invoice: "", faturadoEm: "" });
       await fetchOrders();
     } catch (err: any) {
       showToast(err.message || "Erro ao marcar pedido como entregue", "error");
@@ -235,6 +246,7 @@ function OrdersListContent() {
           status: "Concluído",
           entregue_em: null,
           invoice_number: null,
+          faturado_em: null,
         })
         .eq("id", order.id)
         .select("id, status, entregue_em")
@@ -623,7 +635,7 @@ function OrdersListContent() {
               <Undo2 className="text-amber-600" size={20} /> Voltar para Concluído
             </h2>
             <p className="text-sm text-gray-600 font-bold mb-4">
-              O pedido <span className="text-[#5D286C] font-black">{revertDeliveredModal.order?.codigo_unico}</span> sairá de Entregue e voltará para Concluído. A nota fiscal e a data de entrega serão apagadas.
+              O pedido <span className="text-[#5D286C] font-black">{revertDeliveredModal.order?.codigo_unico}</span> sairá de Entregue e voltará para Concluído. A nota fiscal, a data de faturamento e a data de entrega serão apagadas.
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -650,16 +662,16 @@ function OrdersListContent() {
         <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md p-6 rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-200">
             <button 
-              onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "" })} 
+              onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "", faturadoEm: "" })} 
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             >
               <X size={20} />
             </button>
             <h2 className="text-xl font-black text-[#262626] mb-3 flex items-center gap-2">
-              <FileText className="text-green-600" size={20} /> Nota Fiscal
+              <FileText className="text-green-600" size={20} /> Nota fiscal e faturamento
             </h2>
             <p className="text-sm text-gray-600 font-bold mb-4">
-              Informe o número da nota fiscal para o pedido <span className="text-[#5D286C] font-black">{invoiceModal.order?.codigo_unico}</span>
+              Informe a nota fiscal e a data de faturamento do pedido <span className="text-[#5D286C] font-black">{invoiceModal.order?.codigo_unico}</span>
             </p>
             <div className="space-y-4">
               <div>
@@ -680,6 +692,21 @@ function OrdersListContent() {
                   }}
                 />
               </div>
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase ml-2 block mb-2">
+                  Data de faturamento
+                </label>
+                <input
+                  type="date"
+                  lang="pt-BR"
+                  required
+                  value={invoiceModal.faturadoEm}
+                  max={todayYmdBr()}
+                  onChange={(e) => setInvoiceModal({ ...invoiceModal, faturadoEm: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#5D286C] focus:bg-white rounded-2xl font-bold outline-none transition-all"
+                />
+                <p className="text-[10px] font-bold text-gray-400 ml-2 mt-1">Dia em que a nota foi emitida (hoje ou antes).</p>
+              </div>
               <div className="flex flex-col gap-2">
                 <button
                   onClick={handleConfirmDeliverOrder}
@@ -688,7 +715,7 @@ function OrdersListContent() {
                   Confirmar Entrega
                 </button>
                 <button
-                  onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "" })}
+                  onClick={() => setInvoiceModal({ isOpen: false, order: null, invoice: "", faturadoEm: "" })}
                   className="w-full bg-gray-100 text-gray-600 p-3 rounded-2xl font-black text-sm hover:bg-gray-200 transition-all"
                 >
                   Cancelar
