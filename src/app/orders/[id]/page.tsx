@@ -166,8 +166,10 @@ function OrderDetailsInner() {
             </h2>
             <div className="space-y-3">
               {sortedItems.map((item: any, idx: number) => {
-                const reserved = getDisplayReservedQty(item);
-                const missing = getRemainingQty(item);
+                // Pedido concluído/entregue: o estoque já foi baixado, não há reserva nem falta
+                const baixado = order.status !== "Pendente";
+                const reserved = baixado ? 0 : getDisplayReservedQty(item);
+                const missing = baixado ? 0 : getRemainingQty(item);
                 const fullyReserved = reserved > 0 && missing === 0;
                 const partiallyReserved = reserved > 0 && missing > 0;
                 return (
@@ -199,12 +201,18 @@ function OrderDetailsInner() {
                     </div>
                     <span className="text-[10px] font-bold text-gray-500 mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
                       <span>Pedido: {item.quantidade}</span>
-                      <span className={reserved > 0 ? "text-amber-700 font-black" : ""}>
-                        Reservado: {reserved}
-                      </span>
-                      <span className={missing > 0 ? "text-red-600 font-black" : "text-green-600"}>
-                        Faltante: {missing}
-                      </span>
+                      {baixado ? (
+                        <span className="text-green-600 font-black">Baixado: {item.quantidade}</span>
+                      ) : (
+                        <>
+                          <span className={reserved > 0 ? "text-amber-700 font-black" : ""}>
+                            Reservado: {reserved}
+                          </span>
+                          <span className={missing > 0 ? "text-red-600 font-black" : "text-green-600"}>
+                            Faltante: {missing}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <span
