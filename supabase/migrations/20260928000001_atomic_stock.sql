@@ -374,6 +374,13 @@ grant execute on function public.adjust_kit_stock(bigint, integer, boolean)     
 grant execute on function public.register_material_entry(bigint, numeric, date)                            to authenticated;
 
 -- Funções antigas que ninguém deveria chamar anonimamente
-revoke execute on function public.increment_molde_stock(bigint, integer) from public, anon;
+-- (a 007 remove a função; o if mantém este script reexecutável)
+do $$
+begin
+  if to_regprocedure('public.increment_molde_stock(bigint, integer)') is not null then
+    revoke execute on function public.increment_molde_stock(bigint, integer) from public, anon;
+  end if;
+end;
+$$;
 
 commit;

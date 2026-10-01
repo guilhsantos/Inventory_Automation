@@ -78,7 +78,9 @@ export default function MachineRow({ machine, moldes, onUpdated }: MachineRowPro
         showToast("Informe o motivo da máquina parada.", "error");
         return;
       }
-      ok = await save(pendingStatus, machine.current_molde_id, observacao.trim() || null);
+      // Parada libera o molde; manutenção mantém o molde que está na máquina
+      const molde = pendingStatus === "PARADA" ? null : machine.current_molde_id;
+      ok = await save(pendingStatus, molde, observacao.trim() || null);
     }
     if (ok) setPendingStatus(null);
   }

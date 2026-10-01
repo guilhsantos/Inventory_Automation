@@ -14,7 +14,7 @@ import {
   Calendar,
 } from "lucide-react";
 import Link from "next/link";
-import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } from "@/lib/date-utils";
+import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 import { fetchMachineStates, MachineState } from "@/lib/machines";
 import MachinesPanel, { ProductionRow } from "@/components/dashboard/MachinesPanel";
@@ -52,7 +52,8 @@ function sortChartDays(rows: { name: string }[]) {
 
 export default function VisaoGeralPage() {
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState(() => ymdAddDaysBr(todayYmdBr(), -7));
+  // Abre sempre no dia atual; o usuário amplia o período pelo filtro
+  const [startDate, setStartDate] = useState(todayYmdBr);
   const [endDate, setEndDate] = useState(todayYmdBr);
   const [stats, setStats] = useState({
     totalOrders: 0,
