@@ -30,6 +30,7 @@ type OrderRow = {
   status: string;
   created_at: string | null;
   concluido_em: string | null;
+  faturado_em: string | null;
   entregue_em: string | null;
   totalKits: number;
   sortKey: number;
@@ -44,7 +45,7 @@ type KitRankItem = {
 
 type RowFilter = "todos" | "defeitos" | "prod_maquina";
 type TableMode = "molde" | "kit" | "pedidos";
-type OrderStatus = "Todos" | "Pendente" | "Concluído" | "Entregue";
+type OrderStatus = "Todos" | "Pendente" | "Concluído" | "Entregue" | "Faturado";
 
 type FetchParams = {
   rangeStart: string;
@@ -120,19 +121,22 @@ export default function PerformancePage() {
           : null;
 
       if (params.mode === "pedidos") {
-        // Coluna de data conforme status
-        const dateCol =
-          params.orderStatus === "Concluído" ? "concluido_em" :
-          params.orderStatus === "Entregue"  ? "entregue_em"  : "created_at";
-
         let q = supabase
           .from("orders")
-          .select("id, codigo_unico, cliente, status, created_at, concluido_em, entregue_em, order_items(quantidade, kit_id, kits(nome_kit))")
-          .gte(dateCol, startIso)
-          .lte(dateCol, endIso);
+          .select("id, codigo_unico, cliente, status, created_at, concluido_em, faturado_em, entregue_em, order_items(quantidade, kit_id, kits(nome_kit))");
 
-        if (params.orderStatus !== "Todos") {
-          q = q.eq("status", params.orderStatus);
+        if (params.orderStatus === "Faturado") {
+          // faturado_em é só data (YYYY-MM-DD): compara direto com o período, sem fuso
+          q = q.gte("faturado_em", params.rangeStart).lte("faturado_em", params.rangeEnd);
+        } else {
+          // Coluna de data conforme status
+          const dateCol =
+            params.orderStatus === "Concluído" ? "concluido_em" :
+            params.orderStatus === "Entregue"  ? "entregue_em"  : "created_at";
+          q = q.gte(dateCol, startIso).lte(dateCol, endIso);
+          if (params.orderStatus !== "Todos") {
+            q = q.eq("status", params.orderStatus);
+          }
         }
 
         const { data: ordersRaw } = await q;
@@ -164,6 +168,7 @@ export default function PerformancePage() {
             status: o.status,
             created_at: o.created_at || null,
             concluido_em: o.concluido_em || null,
+            faturado_em: o.faturado_em || null,
             entregue_em: o.entregue_em || null,
             totalKits,
             sortKey: new Date(o.created_at || 0).getTime(),
@@ -607,6 +612,7 @@ export default function PerformancePage() {
                 <option value="Pendente">Pendente</option>
                 <option value="Concluído">Concluído</option>
                 <option value="Entregue">Entregue</option>
+                <option value="Faturado">Faturado</option>
               </select>
             </div>
           )}
@@ -777,6 +783,7 @@ export default function PerformancePage() {
                   <th className="p-3">Total Kits</th>
                   <th className="p-3">Data Criado</th>
                   <th className="p-3">Data Concluído</th>
+                  <th className="p-3">Data Faturamento</th>
                   <th className="p-3">Data Entregue</th>
                   <th className="p-3">Status</th>
                 </tr>
@@ -802,6 +809,7 @@ export default function PerformancePage() {
                       <td className="p-3">{row.totalKits}</td>
                       <td className="p-3 whitespace-nowrap">{row.created_at ? formatDate(row.created_at) : "—"}</td>
                       <td className="p-3 whitespace-nowrap">{showConcluido && row.concluido_em ? formatDate(row.concluido_em) : "—"}</td>
+                      <td className="p-3 whitespace-nowrap">{row.faturado_em ? formatDate(row.faturado_em) : "—"}</td>
                       <td className="p-3 whitespace-nowrap">{showEntregue && row.entregue_em ? formatDate(row.entregue_em) : "—"}</td>
                       <td className="p-3">
                         <span className="text-[10px] font-black px-2 py-1 rounded-full bg-black/10 uppercase">{row.status}</span>
@@ -809,7 +817,7 @@ export default function PerformancePage() {
                     </tr>
                     {expandedOrderId === row.id && (
                       <tr key={`${row.id}-expand`}>
-                        <td colSpan={8} className="px-4 pb-4 bg-white/60">
+                        <td colSpan={9} className="px-4 pb-4 bg-white/60">
                           <div className="rounded-2xl border border-purple-100 p-4 space-y-2">
                             {row.order_items.map((item) => (
                               <div key={item.kit_id} className="flex justify-between text-sm font-bold">

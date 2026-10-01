@@ -150,6 +150,11 @@ function OrderDetailsInner() {
             {order.invoice_number && (
               <p className="text-xs font-bold text-gray-500">
                 NF: <span className="text-gray-800">{order.invoice_number}</span>
+                {order.faturado_em && (
+                  <>
+                    {" · "}Faturado em <span className="text-gray-800">{formatDate(order.faturado_em)}</span>
+                  </>
+                )}
               </p>
             )}
             {order.notes && (
