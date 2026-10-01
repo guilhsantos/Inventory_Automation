@@ -18,7 +18,7 @@ import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr, ymdAddDaysBr } 
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 import { fetchMachineStates, MachineState } from "@/lib/machines";
 import MachinesPanel, { ProductionRow } from "@/components/dashboard/MachinesPanel";
-import MaterialStockPanel, { MaterialStock } from "@/components/dashboard/MaterialStockPanel";
+import { MaterialStock } from "@/components/dashboard/MaterialStockPanel";
 
 const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
 const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
@@ -257,19 +257,14 @@ export default function VisaoGeralPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
         <StatCard title="Total Pedidos" value={stats.totalOrders} icon={<ShoppingCart />} color="text-blue-600" />
         <StatCard title="Entregues" value={stats.deliveredOrders} icon={<CheckCircle2 />} color="text-green-600" />
         <StatCard title="Concluídos" value={stats.completedOrders} icon={<CheckCircle2 />} color="text-emerald-600" />
         <StatCard title="Pendentes" value={stats.pendingOrders} icon={<Clock />} color="text-purple-600" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2 min-w-0">
-          <MachinesPanel machines={machines} production={production} />
-        </div>
-        <MaterialStockPanel materials={materials} />
-      </div>
+      <MachinesPanel machines={machines} production={production} materials={materials} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] gap-6 items-start">
         <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 min-w-0">
@@ -420,11 +415,11 @@ export default function VisaoGeralPage() {
 
 function StatCard({ title, value, icon, color }: any) {
   return (
-    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex items-center gap-6">
-      <div className={`p-4 rounded-2xl bg-gray-50 ${color}`}>{icon}</div>
+    <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+      <div className={`p-2 md:p-4 rounded-2xl bg-gray-50 w-fit ${color}`}>{icon}</div>
       <div>
         <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">{title}</p>
-        <p className="text-3xl font-black text-[#262626]">{value}</p>
+        <p className="text-2xl md:text-3xl font-black text-[#262626]">{value}</p>
       </div>
     </div>
   );

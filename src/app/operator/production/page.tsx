@@ -42,26 +42,28 @@ export default function OperatorProductionPage() {
     void load();
   }, [loadMachines]);
 
-  const semMolde = machines.filter((m) => m.current_molde_id === null).length;
+  // Só importa para máquinas em operação (paradas/manutenção não lançam produção)
+  const semMolde = machines.filter((m) => m.status === "EM_OPERACAO" && m.current_molde_id === null).length;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      <div className="text-center md:text-left">
-        <h1 className="text-3xl md:text-4xl font-black text-[#262626]">Operação de Produção</h1>
-        <p className="text-gray-500 font-bold mt-1">Selecione a atividade ou atualize as máquinas.</p>
+    <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
+      <div>
+        <h1 className="text-2xl md:text-4xl font-black text-[#262626]">Operação de Produção</h1>
+        <p className="hidden md:block text-gray-500 font-bold mt-1">Selecione a atividade ou atualize as máquinas.</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {/* Celular: fileira de ícones; telas maiores: botões com o nome ao lado */}
+      <div className="grid grid-cols-5 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3">
         {actions.map((action) => (
           <Link
             key={action.title}
             href={action.path}
-            className="group flex items-center gap-3 bg-white p-3 rounded-2xl border-2 border-gray-100 shadow-sm hover:shadow-md hover:border-transparent transition-all min-h-[72px] last:col-span-2 md:last:col-span-1"
+            className="group flex flex-col sm:flex-row items-center gap-1 sm:gap-3 sm:bg-white sm:p-3 rounded-2xl sm:border-2 sm:border-gray-100 sm:shadow-sm sm:hover:shadow-md transition-all sm:min-h-[72px] text-center sm:text-left"
           >
-            <div className={`${action.color} text-white p-3 rounded-xl shadow group-hover:scale-105 transition-transform shrink-0`}>
+            <div className={`${action.color} text-white p-3 rounded-2xl shadow group-hover:scale-105 group-active:scale-95 transition-transform shrink-0`}>
               {action.icon}
             </div>
-            <span className="font-black text-[#262626] leading-tight">{action.title}</span>
+            <span className="font-black text-[#262626] leading-tight text-[10px] sm:text-sm">{action.title}</span>
           </Link>
         ))}
       </div>
@@ -95,7 +97,7 @@ export default function OperatorProductionPage() {
         ) : machines.length === 0 ? (
           <p className="text-center text-gray-400 font-bold py-10">Nenhuma máquina cadastrada.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {machines.map((machine) => (
               <MachineRow key={machine.id} machine={machine} moldes={moldes} onUpdated={() => void loadMachines()} />
             ))}
