@@ -14,65 +14,111 @@ export interface ProductionRow {
   moldes: { nome: string } | null;
 }
 
+export interface DefectRow {
+  machine_id: number | null;
+  molde_id: number | null;
+  quantity: number | null;
+  created_at: string;
+  moldes: { nome: string } | null;
+}
+
 interface MachinesPanelProps {
   machines: MachineState[];
   production: ProductionRow[];
+  defects: DefectRow[];
   materials: MaterialStock[];
 }
 
+/** Produção do molde no período: ok = produzido − defeitos. */
+interface MoldeQtd {
+  nome: string;
+  ok: number;
+  def: number;
+}
+
 interface MachineSummary {
-  total: number;
+  ok: number;
+  def: number;
   lastAt: string | null;
-  byMolde: Map<number, { nome: string; qtd: number }>;
+  byMolde: Map<number, MoldeQtd & { prod: number }>;
 }
 
 interface MachineView {
   machine: MachineState;
   emAndamento: boolean;
-  qtdAtual: number;
-  outros: { id: number; nome: string; qtd: number }[];
-  total: number;
+  atual: MoldeQtd;
+  outros: (MoldeQtd & { id: number })[];
+  ok: number;
+  def: number;
   lastAt: string | null;
 }
 
-function summarize(production: ProductionRow[]): Map<number, MachineSummary> {
+function summarize(production: ProductionRow[], defects: DefectRow[]): Map<number, MachineSummary> {
   const byMachine = new Map<number, MachineSummary>();
+  const entry = (machineId: number, moldeId: number, nome: string | undefined) => {
+    let s = byMachine.get(machineId);
+    if (!s) {
+      s = { ok: 0, def: 0, lastAt: null, byMolde: new Map() };
+      byMachine.set(machineId, s);
+    }
+    let m = s.byMolde.get(moldeId);
+    if (!m) {
+      m = { nome: nome ?? `Molde #${moldeId}`, prod: 0, def: 0, ok: 0 };
+      s.byMolde.set(moldeId, m);
+    }
+    return { s, m };
+  };
+
   for (const row of production) {
     if (row.machine_id == null || row.molde_id == null) continue;
-    let s = byMachine.get(row.machine_id);
-    if (!s) {
-      s = { total: 0, lastAt: null, byMolde: new Map() };
-      byMachine.set(row.machine_id, s);
-    }
-    const qtd = row.quantidade_boa || 0;
-    s.total += qtd;
+    const { s, m } = entry(row.machine_id, row.molde_id, row.moldes?.nome);
+    m.prod += row.quantidade_boa || 0;
     if (!s.lastAt || row.created_at > s.lastAt) s.lastAt = row.created_at;
-    const m = s.byMolde.get(row.molde_id) ?? { nome: row.moldes?.nome ?? `Molde #${row.molde_id}`, qtd: 0 };
-    m.qtd += qtd;
-    s.byMolde.set(row.molde_id, m);
+  }
+  for (const row of defects) {
+    if (row.machine_id == null || row.molde_id == null) continue;
+    const { m } = entry(row.machine_id, row.molde_id, row.moldes?.nome);
+    m.def += row.quantity || 0;
+  }
+
+  for (const s of byMachine.values()) {
+    for (const m of s.byMolde.values()) {
+      // Defeito registrado num período sobre produção de outro não deixa o "OK" negativo
+      m.ok = Math.max(0, m.prod - m.def);
+      s.ok += m.ok;
+      s.def += m.def;
+    }
   }
   return byMachine;
 }
 
-function buildViews(machines: MachineState[], production: ProductionRow[]): MachineView[] {
-  const summaries = summarize(production);
+function buildViews(machines: MachineState[], production: ProductionRow[], defects: DefectRow[]): MachineView[] {
+  const summaries = summarize(production, defects);
   return machines.map((machine) => {
     const s = summaries.get(machine.id);
     const outros = s
       ? [...s.byMolde.entries()]
           .filter(([id]) => id !== machine.current_molde_id)
-          .map(([id, m]) => ({ id, ...m }))
-          .sort((a, b) => b.qtd - a.qtd)
+          .map(([id, m]) => ({ id, nome: m.nome, ok: m.ok, def: m.def }))
+          .sort((a, b) => b.ok - a.ok)
       : [];
+    const atual = machine.current_molde_id != null ? s?.byMolde.get(machine.current_molde_id) : undefined;
     return {
       machine,
       emAndamento: machine.status === "EM_OPERACAO" && machine.current_molde_id != null,
-      qtdAtual: machine.current_molde_id != null ? s?.byMolde.get(machine.current_molde_id)?.qtd ?? 0 : 0,
+      atual: { nome: atual?.nome ?? "", ok: atual?.ok ?? 0, def: atual?.def ?? 0 },
       outros,
-      total: s?.total ?? 0,
+      ok: s?.ok ?? 0,
+      def: s?.def ?? 0,
       lastAt: s?.lastAt ?? null,
     };
   });
+}
+
+/** "−N def." em vermelho; não aparece quando não há defeito. */
+function Defeitos({ n, className = "" }: { n: number; className?: string }) {
+  if (n <= 0) return null;
+  return <span className={`font-black text-red-600 whitespace-nowrap ${className}`}>−{n} def.</span>;
 }
 
 function StatusBadge({ view, className = "" }: { view: MachineView; className?: string }) {
@@ -100,7 +146,8 @@ function OutrosMoldes({ outros }: { outros: MachineView["outros"] }) {
             key={m.id}
             className="shrink-0 bg-white border border-gray-200 rounded-xl px-2 py-1 text-xs font-bold text-gray-500 whitespace-nowrap"
           >
-            {m.nome} · <span className="text-[#262626]">{m.qtd} un</span>
+            {m.nome} · <span className="text-[#262626]">{m.ok} un</span>
+            {m.def > 0 && <Defeitos n={m.def} className="ml-1" />}
           </span>
         ))}
       </div>
@@ -122,8 +169,8 @@ function MachineCard({ view }: { view: MachineView }) {
       </div>
 
       <div className="flex-1 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-black text-xl text-[#262626] truncate">{machine.nome}</p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-black text-xl text-[#262626] break-words min-w-0 leading-tight">{machine.nome}</p>
           <StatusBadge view={view} />
         </div>
 
@@ -132,10 +179,13 @@ function MachineCard({ view }: { view: MachineView }) {
           {machine.moldes ? (
             <div className="flex items-baseline justify-between gap-2">
               <p className="font-black text-[#5D286C] break-words min-w-0">{machine.moldes.nome}</p>
-              <p className="text-3xl font-black text-[#262626] shrink-0">
-                {view.qtdAtual}
-                <span className="text-xs text-gray-400 ml-1">un</span>
-              </p>
+              <div className="text-right shrink-0">
+                <p className="text-3xl font-black text-[#262626] leading-none">
+                  {view.atual.ok}
+                  <span className="text-xs text-gray-400 ml-1">un ok</span>
+                </p>
+                <Defeitos n={view.atual.def} className="text-xs" />
+              </div>
             </div>
           ) : (
             <p className="font-bold text-amber-600">Sem molde definido</p>
@@ -152,7 +202,13 @@ function MachineCard({ view }: { view: MachineView }) {
 
         <div className="mt-auto flex flex-wrap justify-between gap-x-3 gap-y-1 pt-3 border-t border-gray-200 text-[10px] font-bold text-gray-400 uppercase">
           <span>
-            Total: <span className="text-[#262626]">{view.total} un</span>
+            Total ok: <span className="text-[#262626]">{view.ok} un</span>
+            {view.def > 0 && (
+              <>
+                {" · "}
+                <span className="text-red-600">Defeitos: {view.def}</span>
+              </>
+            )}
           </span>
           <span>
             {view.lastAt ? (
@@ -187,7 +243,8 @@ function MachineListItem({ view }: { view: MachineView }) {
             </p>
             {machine.moldes && (
               <p className="font-black text-[#262626] shrink-0">
-                {view.qtdAtual} <span className="text-[10px] text-gray-400">un</span>
+                {view.atual.ok} <span className="text-[10px] text-gray-400">un ok</span>
+                <Defeitos n={view.atual.def} className="text-xs ml-1" />
               </p>
             )}
           </div>
@@ -195,7 +252,7 @@ function MachineListItem({ view }: { view: MachineView }) {
             {machine.status !== "EM_OPERACAO" && machine.status_observacao
               ? `Obs.: ${machine.status_observacao}`
               : view.lastAt
-                ? `Total ${view.total} un · último ${formatDateTime(view.lastAt)}`
+                ? `Total ${view.ok} ok${view.def > 0 ? ` · ${view.def} def.` : ""} · último ${formatDateTime(view.lastAt)}`
                 : "Sem lançamento no período"}
           </p>
         </div>
@@ -205,8 +262,8 @@ function MachineListItem({ view }: { view: MachineView }) {
   );
 }
 
-export default function MachinesPanel({ machines, production, materials }: MachinesPanelProps) {
-  const views = buildViews(machines, production);
+export default function MachinesPanel({ machines, production, defects, materials }: MachinesPanelProps) {
+  const views = buildViews(machines, production, defects);
 
   return (
     <section className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-gray-100 min-w-0 md:min-h-[calc(100vh-6rem)] flex flex-col gap-4 md:gap-6">
@@ -215,7 +272,7 @@ export default function MachinesPanel({ machines, production, materials }: Machi
           <h2 className="text-xl md:text-2xl font-black text-[#262626] flex items-center gap-2">
             <Cpu className="text-[#5D286C]" size={24} /> Máquinas
           </h2>
-          <p className="text-[10px] font-bold text-gray-400 uppercase">Produção no período filtrado</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Produção ok (produzido − defeitos) no período filtrado</p>
         </div>
         <MaterialStockPanel materials={materials} />
       </div>

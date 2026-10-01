@@ -17,7 +17,7 @@ import Link from "next/link";
 import { brDayRangeIso, formatDayKeyBrFromTimestamp, todayYmdBr } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 import { fetchMachineStates, MachineState } from "@/lib/machines";
-import MachinesPanel, { ProductionRow } from "@/components/dashboard/MachinesPanel";
+import MachinesPanel, { DefectRow, ProductionRow } from "@/components/dashboard/MachinesPanel";
 import { MaterialStock } from "@/components/dashboard/MaterialStockPanel";
 
 const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
@@ -65,6 +65,7 @@ export default function VisaoGeralPage() {
   const [criticalOrders, setCriticalOrders] = useState<any[]>([]);
   const [machines, setMachines] = useState<MachineState[]>([]);
   const [production, setProduction] = useState<ProductionRow[]>([]);
+  const [defects, setDefects] = useState<DefectRow[]>([]);
   const [materials, setMaterials] = useState<MaterialStock[]>([]);
   const [seriesVisible, setSeriesVisible] = useState({
     criados: true,
@@ -100,7 +101,7 @@ export default function VisaoGeralPage() {
 
       const { startIso, endIso } = brDayRangeIso(startDate, endDate);
 
-      const [machinesRes, productionRes, materialsRes] = await Promise.all([
+      const [machinesRes, productionRes, defectsRes, materialsRes] = await Promise.all([
         fetchMachineStates().catch((error) => {
           console.error("Erro ao carregar máquinas:", error);
           return [] as MachineState[];
@@ -110,9 +111,15 @@ export default function VisaoGeralPage() {
           .select("machine_id, molde_id, quantidade_boa, created_at, moldes(nome)")
           .gte("created_at", startIso)
           .lte("created_at", endIso),
+        supabase
+          .from("defects")
+          .select("machine_id, molde_id, quantity, created_at, moldes(nome)")
+          .gte("created_at", startIso)
+          .lte("created_at", endIso),
         supabase.from("materials").select("id, nome, estoque_kg").order("nome"),
       ]);
       setMachines(machinesRes);
+      setDefects((defectsRes.data as unknown as DefectRow[]) || []);
       setProduction((productionRes.data as unknown as ProductionRow[]) || []);
       setMaterials((materialsRes.data as MaterialStock[]) || []);
 
@@ -265,7 +272,7 @@ export default function VisaoGeralPage() {
         <StatCard title="Pendentes" value={stats.pendingOrders} icon={<Clock />} color="text-purple-600" />
       </div>
 
-      <MachinesPanel machines={machines} production={production} materials={materials} />
+      <MachinesPanel machines={machines} production={production} defects={defects} materials={materials} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] gap-6 items-start">
         <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 min-w-0">
