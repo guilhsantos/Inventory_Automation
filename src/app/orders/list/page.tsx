@@ -282,6 +282,10 @@ function OrdersListContent() {
 
       if (error) throw error;
 
+      // As fotos da baixa deixam de valer: a nova baixa anexa as suas
+      const { error: photosError } = await supabase.from("order_photos").delete().eq("order_id", order.id);
+      if (photosError) throw photosError;
+
       showToast("Pedido voltou para Pendente e estoque foi ajustado.");
       setBackToPendingModal({ isOpen: false, order: null });
       await fetchOrders();
