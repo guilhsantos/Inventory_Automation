@@ -16,10 +16,11 @@ export default function LoginPage() {
 
   // Redirecionar usuário já autenticado
   useEffect(() => {
-    if (authLoading || !user) return;
+    // Espera o papel carregar: sem isso o operador caía no painel de admin
+    if (authLoading || !user || !role) return;
     if (role === "OP_ESTOQUE" || role === "OP_PRODUCAO") {
       router.replace("/operator/dashboard");
-    } else {
+    } else if (role === "ADMIN") {
       router.replace("/dashboard");
     }
   }, [user, role, authLoading, router]);

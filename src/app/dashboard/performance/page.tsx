@@ -206,7 +206,7 @@ export default function PerformancePage() {
         let prodQ = supabase
           .from("daily_production")
           .select(
-            "molde_id, machine_id, material_id, quantidade_boa, sacos_usados, created_at, usuario_id, moldes(nome), machines(nome), materials(nome)"
+            "molde_id, machine_id, material_id, quantidade_boa, sacos_usados, observacao, created_at, usuario_id, moldes(nome), machines(nome), materials(nome)"
           )
           .gte("created_at", startIso)
           .lte("created_at", endIso);
@@ -374,7 +374,7 @@ export default function PerformancePage() {
               dataRaw: row.created_at,
               qtd: row.quantidade_boa || 0,
               kg,
-              obs: "",
+              obs: row.observacao || "—",
               usuario: resolveUserName(row.usuario_id),
               userId: row.usuario_id ? String(row.usuario_id) : null,
               machineId: row.machine_id ?? null,
@@ -741,7 +741,7 @@ export default function PerformancePage() {
                       <td className="p-3 whitespace-nowrap">{formatDateTime(row.dataRaw)}</td>
                       <td className="p-3">{row.qtd}</td>
                       <td className="p-3">{row.kg > 0 ? row.kg.toFixed(2) : "—"}</td>
-                      <td className="p-3 max-w-[200px]">{row.obs}</td>
+                      <td className="p-3 max-w-[260px] whitespace-pre-wrap break-words">{row.obs}</td>
                       <td className="p-3 whitespace-nowrap">{row.usuario}</td>
                     </tr>
                   );
