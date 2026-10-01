@@ -20,8 +20,13 @@ end $$;
 create function pg_temp.ok(p_nome text) returns void language plpgsql as $$
 begin raise notice 'PASSOU  %', p_nome; end $$;
 
+-- Molde que nunca foi produzido (para o teste de defeito sem histórico)
+insert into moldes (nome, estoque_atual) values ('ZZ Teste Sem Producao', 10);
+
 create temp table ref as
 select
+  (select id from machines where nome = 'Injetora 01') as outra_maq,
+  (select id from moldes where nome = 'ZZ Teste Sem Producao') as molde_sem_prod,
   (select id from machines where nome = 'Injetora 03') as maq,
   (select id from moldes where nome = 'Tapete Dianteiro Esquerdo') as molde_a,
   (select id from moldes where nome = 'Tapete Traseiro') as molde_b,
@@ -131,7 +136,7 @@ end $$;
 
 -- =============================================================== DEFEITOS
 do $$
-declare r ref%rowtype; p0 int;
+declare r ref%rowtype; p0 int; v_id bigint;
 begin
   select * into r from ref;
   select estoque_atual into p0 from moldes where id = r.molde_a;
@@ -142,11 +147,24 @@ begin
     if sqlerrm like 'FALHOU%' then raise; end if;
     perform pg_temp.ok('Defeito maior que o estoque é recusado');
   end;
-  perform register_defect(r.molde_a, r.maq, 2, 'teste');
+  -- Envia outra máquina de propósito: o banco usa a última que produziu o molde
+  v_id := register_defect(r.molde_a, r.outra_maq, 2, 'teste');
   if (select estoque_atual from moldes where id = r.molde_a) <> p0 - 2 then
     raise exception 'FALHOU defeito não descontou a peça';
   end if;
   perform pg_temp.ok('Defeito desconta a peça');
+  if (select machine_id from defects where id = v_id) <> r.maq then
+    raise exception 'FALHOU defeito não usou a última máquina do molde';
+  end if;
+  perform pg_temp.ok('Defeito usa a última máquina que produziu o molde');
+
+  begin
+    perform register_defect(r.molde_sem_prod, r.maq, 1, 'teste');
+    raise exception 'FALHOU defeito em molde sem produção foi aceito';
+  exception when others then
+    if sqlerrm like 'FALHOU%' then raise; end if;
+    perform pg_temp.ok('Molde sem produção não aceita defeito');
+  end;
 end $$;
 
 -- =============================================================== KITS
@@ -259,6 +277,24 @@ begin
     raise exception 'FALHOU entrada de material';
   end if;
   perform pg_temp.ok('Admin registra entrada de material');
+
+  -- Entrega com data de faturamento: nunca depois do dia da entrega
+  begin
+    update orders set status = 'Entregue', invoice_number = 'NF-TESTE', entregue_em = now(),
+                      faturado_em = current_date + 1
+     where id = r.pedido;
+    raise exception 'FALHOU faturamento depois da entrega foi aceito';
+  exception when others then
+    if sqlerrm like 'FALHOU%' then raise; end if;
+    perform pg_temp.ok('Data de faturamento não pode ser depois da entrega');
+  end;
+  update orders set status = 'Entregue', invoice_number = 'NF-TESTE', entregue_em = now(),
+                    faturado_em = current_date - 2
+   where id = r.pedido;
+  if (select faturado_em from orders where id = r.pedido) <> current_date - 2 then
+    raise exception 'FALHOU data de faturamento não gravada';
+  end if;
+  perform pg_temp.ok('Admin entrega pedido com NF e data de faturamento anterior');
 
   if (select count(*) from profiles) < 3 then raise exception 'FALHOU admin não vê todos os perfis'; end if;
   perform pg_temp.ok('Admin vê todos os perfis');
