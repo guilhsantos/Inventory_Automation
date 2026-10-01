@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { Plus, Cpu, Save, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
+import { MACHINE_STATUS_BADGE, MACHINE_STATUS_LABEL, MachineStatus } from "@/lib/machines";
 
 export default function MachineConfigPage() {
   const [machines, setMachines] = useState<any[]>([]);
@@ -43,7 +44,7 @@ export default function MachineConfigPage() {
     if (!newName) return;
     
     setIsSubmitting(true);
-    const { error } = await supabase.from("machines").insert({ nome: newName, status: "Ativa" });
+    const { error } = await supabase.from("machines").insert({ nome: newName });
     
     if (!error) {
       setNewName("");
@@ -123,8 +124,8 @@ export default function MachineConfigPage() {
                   ) : (
                     <p className="font-black text-[#262626]">{m.nome}</p>
                   )}
-                  <span className="text-[10px] bg-green-100 text-green-600 px-2 py-1 rounded-full font-black uppercase mt-1 inline-block">
-                    {m.status || "Ativa"}
+                  <span className={`text-[10px] px-2 py-1 rounded-full font-black uppercase mt-1 inline-block ${MACHINE_STATUS_BADGE[m.status as MachineStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                    {MACHINE_STATUS_LABEL[m.status as MachineStatus] ?? m.status}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">

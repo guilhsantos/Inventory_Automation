@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
@@ -17,6 +17,7 @@ export default function DefectsPage() {
   const [machines, setMachines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -45,55 +46,32 @@ export default function DefectsPage() {
       return showToast("Preencha a peça, quantidade e máquina.", "error");
     }
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
-      const quantity = parseInt(formData.quantity);
-
-      // 1. Buscar estoque atual do molde
-      const { data: molde, error: moldeError } = await supabase
-        .from("moldes")
-        .select("id, nome, estoque_atual")
-        .eq("id", formData.molde_id)
-        .single();
-
-      if (moldeError) throw moldeError;
-      if (!molde) throw new Error("Peça não encontrada");
-
-      // 2. Verificar se estoque >= quantity
-      const availableStock = molde.estoque_atual || 0;
-      if (availableStock < quantity) {
-        const missing = quantity - availableStock;
-        const errorMsg = `Estoque insuficiente.\n\n${molde.nome}\nFaltam: ${missing} unidade(s)`;
-        setValidationError(errorMsg);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 3. Se tiver estoque, salvar defeito e decrementar estoque do molde
-      const { error: defectError } = await supabase.from("defects").insert({
-        molde_id: formData.molde_id,
-        user_id: user?.id,
-        quantity: quantity,
-        reason: formData.reason,
-        machine_id: parseInt(formData.machine_id)
+      // Registro do defeito + desconto da peça numa única transação no banco
+      const { error: rpcError } = await supabase.rpc("register_defect", {
+        p_molde_id: parseInt(formData.molde_id),
+        p_machine_id: parseInt(formData.machine_id),
+        p_quantidade: parseInt(formData.quantity),
+        p_motivo: formData.reason || null,
       });
 
-      if (defectError) throw defectError;
-
-      // Descontar do estoque do molde
-      const newStock = availableStock - quantity;
-      const { error: updateError } = await supabase
-        .from("moldes")
-        .update({ estoque_atual: newStock })
-        .eq("id", formData.molde_id);
-
-      if (updateError) throw updateError;
+      if (rpcError) {
+        if (rpcError.message.startsWith("Estoque insuficiente")) {
+          setValidationError(rpcError.message);
+          return;
+        }
+        throw rpcError;
+      }
 
       showToast("Defeito registrado com sucesso! Estoque atualizado.");
       router.push("/operator/production");
     } catch (err: any) {
       showToast("Erro ao salvar: " + err.message, "error");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };

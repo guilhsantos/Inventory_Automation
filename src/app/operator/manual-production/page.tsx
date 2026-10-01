@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Hammer, Box, Save, ArrowLeft, Cpu, AlertTriangle, X } from "lucide-react";
@@ -8,16 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/lib/toast-context";
 import { clearClientStorageAndGoLogin } from "@/lib/session-recovery";
-
-interface Molde {
-  id: number;
-  nome: string;
-}
-
-interface Machine {
-  id: number;
-  nome: string;
-}
+import { fetchMachineStates, MACHINE_STATUS_LABEL, MachineState } from "@/lib/machines";
 
 interface Material {
   id: number;
@@ -28,19 +19,22 @@ interface Material {
 export default function ManualProductionPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [moldes, setMoldes] = useState<Molde[]>([]);
-  const [machines, setMachines] = useState<Machine[]>([]);
+  const [machines, setMachines] = useState<MachineState[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [issubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const { showToast } = useToast();
 
-  const [selectedMolde, setSelectedMolde] = useState<string>("");
   const [selectedMachine, setSelectedMachine] = useState<string>("");
   const [selectedMaterial, setSelectedMaterial] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("");
   const [bagsUsed, setBagsUsed] = useState<string>("");
+  const [observacao, setObservacao] = useState<string>("");
+
+  const submittingRef = useRef(false);
+  // Identifica este lançamento: reenvios/duplo clique não contam a produção duas vezes
+  const requestIdRef = useRef<string>(crypto.randomUUID());
 
   useEffect(() => {
     let cancelled = false;
@@ -54,23 +48,23 @@ export default function ManualProductionPage() {
 
     async function fetchData() {
       try {
-        const [moldesRes, machinesRes, materialsRes] = await Promise.all([
-          supabase.from("moldes").select("id, nome").order("nome"),
-          supabase.from("machines").select("id, nome").order("nome"),
+        const [machinesRes, materialsRes] = await Promise.all([
+          fetchMachineStates().then(
+            (data) => ({ data, error: null }),
+            (error) => ({ data: null, error })
+          ),
           supabase.from("materials").select("id, nome, estoque_kg").order("nome"),
         ]);
 
         if (cancelled) return;
 
-        const failed =
-          !!moldesRes.error && !!machinesRes.error && !!materialsRes.error;
+        const failed = !!machinesRes.error && !!materialsRes.error;
         if (failed) {
           void supabase.auth.signOut();
           clearClientStorageAndGoLogin();
           return;
         }
 
-        if (moldesRes.data) setMoldes(moldesRes.data);
         if (machinesRes.data) setMachines(machinesRes.data);
         if (materialsRes.data) setMaterials(materialsRes.data);
       } catch {
@@ -92,71 +86,63 @@ export default function ManualProductionPage() {
     };
   }, []);
 
+  // O molde é sempre o definido na máquina (tela de Operação), sem opção de troca aqui
+  const machine = machines.find((m) => String(m.id) === selectedMachine) ?? null;
+  const machineBlockReason = !machine
+    ? null
+    : machine.status !== "EM_OPERACAO"
+      ? `Esta máquina está ${MACHINE_STATUS_LABEL[machine.status].toLowerCase()} e não pode receber produção.`
+      : machine.current_molde_id === null
+        ? "Defina o molde desta máquina na tela de Operação antes de lançar a produção."
+        : null;
+
   const handleProduction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMolde || !selectedMachine || !quantity || !selectedMaterial || !user) {
+    if (!machine || !quantity || !selectedMaterial || !user) {
       showToast("Preencha todos os campos obrigatórios.", "error");
       return;
     }
+    if (machineBlockReason || machine.current_molde_id === null) {
+      showToast(machineBlockReason ?? "Máquina sem molde definido.", "error");
+      return;
+    }
 
-    setIsSubmitting(true);
     const qtyInt = parseInt(quantity);
-    const bagsInt = parseInt(bagsUsed || "0");
-    const materialConsumed = bagsInt * 25; // 25kg por saco
+    if (!Number.isFinite(qtyInt) || qtyInt <= 0) {
+      showToast("A quantidade produzida deve ser maior que zero.", "error");
+      return;
+    }
+    // Trava síncrona: o estado do React só desabilita o botão no próximo render
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
 
     try {
-      // 1. Buscar material selecionado e verificar estoque
-      const { data: material, error: materialError } = await supabase
-        .from("materials")
-        .select("id, nome, estoque_kg")
-        .eq("id", parseInt(selectedMaterial))
-        .single();
+      // Peça + material + registro numa única transação no banco (tudo ou nada)
+      const { error: rpcError } = await supabase.rpc("register_production", {
+        p_machine_id: machine.id,
+        p_molde_id: machine.current_molde_id,
+        p_material_id: parseInt(selectedMaterial),
+        p_quantidade: qtyInt,
+        p_sacos: parseInt(bagsUsed || "0"),
+        p_observacao: observacao.trim() || null,
+        p_request_id: requestIdRef.current,
+      });
 
-      if (materialError) throw materialError;
-      if (!material) throw new Error("Material não encontrado");
-
-      const availableMaterial = material.estoque_kg || 0;
-
-      // 2. Validar se há material suficiente
-      if (availableMaterial < materialConsumed) {
-        const missing = materialConsumed - availableMaterial;
-        const errorMsg = `Material insuficiente.\n\n${material.nome}\nDisponível: ${availableMaterial} kg\nNecessário: ${materialConsumed} kg\nFaltam: ${missing} kg`;
-        setValidationError(errorMsg);
-        setIsSubmitting(false);
-        return;
+      if (rpcError) {
+        if (rpcError.message.startsWith("Material insuficiente")) {
+          setValidationError(rpcError.message);
+          return;
+        }
+        throw rpcError;
       }
-
-      // 3. Se tiver material suficiente, processar produção
-      await supabase.rpc('increment_molde_stock', {
-        row_id: parseInt(selectedMolde),
-        amount: qtyInt
-      });
-
-      // Descontar material do material selecionado
-      const newMaterialStock = availableMaterial - materialConsumed;
-      const { error: materialUpdateError } = await supabase
-        .from("materials")
-        .update({ estoque_kg: newMaterialStock })
-        .eq("id", parseInt(selectedMaterial));
-
-      if (materialUpdateError) throw materialUpdateError;
-
-      const { error: logError } = await supabase.from("daily_production").insert({
-        molde_id: parseInt(selectedMolde),
-        machine_id: parseInt(selectedMachine),
-        usuario_id: user.id,
-        quantidade_boa: qtyInt,
-        sacos_usados: bagsInt,
-        material_id: parseInt(selectedMaterial),
-      });
-
-      if (logError) throw logError;
 
       showToast("Produção registrada com sucesso!");
       router.push("/operator/production");
     } catch (err: any) {
       showToast(`Erro ao registrar: ${err.message}`, "error");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -205,6 +191,26 @@ export default function ManualProductionPage() {
           </div>
         </div>
 
+        {machine && (
+          <div className="space-y-2">
+            <label className="text-xs font-black text-gray-400 uppercase ml-2">Molde (Peça) na máquina</label>
+            {machineBlockReason ? (
+              <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-amber-800 text-sm font-bold space-y-2">
+                <p className="flex items-start gap-2">
+                  <AlertTriangle size={18} className="shrink-0 mt-0.5" /> {machineBlockReason}
+                </p>
+                <Link href="/operator/production" className="inline-block underline">
+                  Ir para a tela de Operação
+                </Link>
+              </div>
+            ) : (
+              <div className="w-full p-4 bg-purple-50 border-2 border-purple-100 rounded-2xl font-black text-[#5D286C]">
+                {machine.moldes?.nome}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="text-xs font-black text-gray-400 uppercase ml-2">Material utilizado</label>
           <div className="relative">
@@ -223,21 +229,6 @@ export default function ManualProductionPage() {
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs font-black text-gray-400 uppercase ml-2">Molde (Peça)</label>
-          <select
-            required
-            value={selectedMolde}
-            onChange={(e) => setSelectedMolde(e.target.value)}
-            className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#5D286C] focus:bg-white rounded-2xl font-bold outline-none transition-all appearance-none"
-          >
-            <option value="">Escolha uma peça...</option>
-            {moldes.map((m) => (
-              <option key={m.id} value={m.id}>{m.nome}</option>
-            ))}
-          </select>
         </div>
 
         <div className="space-y-2">
@@ -275,9 +266,20 @@ export default function ManualProductionPage() {
           )}
         </div>
 
+        <div className="space-y-2">
+          <label className="text-xs font-black text-gray-400 uppercase ml-2">Observação (opcional)</label>
+          <textarea
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+            maxLength={500}
+            placeholder="Ex: troca de material no meio do lote"
+            className="w-full p-4 bg-gray-50 border-2 border-transparent focus:border-[#5D286C] focus:bg-white rounded-2xl font-bold outline-none transition-all min-h-[100px]"
+          />
+        </div>
+
         <button
           type="submit"
-          disabled={issubmitting}
+          disabled={issubmitting || !!machineBlockReason}
           className="w-full bg-[#5D286C] text-white p-6 rounded-3xl font-black text-xl shadow-xl hover:bg-[#7B1470] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
         >
           {issubmitting ? <Loader2 className="animate-spin" /> : <><Save size={24} /> SALVAR PRODUÇÃO</>}

@@ -35,18 +35,26 @@ function saveCachedRole(userId: string, role: string) {
   }
 }
 
+/**
+ * Sessão sem acesso ao sistema: perfil excluído pelo admin, cadastro ainda
+ * PENDENTE (não liberado) ou login sem perfil.
+ */
+const DELETED_PROFILE = "__SEM_ACESSO__";
+
 async function fetchProfileRoleOnce(userId: string): Promise<"error" | string> {
-  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  const { data, error } = await supabase.from("profiles").select("role, excluido_em").eq("id", userId).single();
   if (error) {
-    if (error.code === "PGRST116") return "OP_ESTOQUE";
+    if (error.code === "PGRST116") return DELETED_PROFILE;
     return "error";
   }
-  return data?.role ?? "OP_ESTOQUE";
+  if (data?.excluido_em || !data?.role || data.role === "PENDENTE") return DELETED_PROFILE;
+  return data.role;
 }
 
 async function fetchProfileRoleWithRetry(userId: string, attempts = 4): Promise<string | null> {
   for (let i = 0; i < attempts; i++) {
     const r = await fetchProfileRoleOnce(userId);
+    if (r === DELETED_PROFILE) return r;
     if (r !== "error") {
       saveCachedRole(userId, r);
       return r;
@@ -87,6 +95,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       // Busca role atualizado em background sem bloquear o authLoading
       fetchProfileRoleWithRetry(session.user.id).then((resolved) => {
+        if (resolved === DELETED_PROFILE) {
+          // Excluído, pendente de liberação ou sem perfil: encerra a sessão
+          void handleLogout();
+          return;
+        }
         if (resolved) {
           setRole(resolved);
         } else if (!cached) {

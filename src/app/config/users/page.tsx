@@ -7,6 +7,14 @@ import { Users, Mail, Shield, Search, Loader2, RefreshCw, UserPlus, Edit2, X, Sa
 import { useToast } from "@/lib/toast-context";
 import ConfirmModal from "@/components/ConfirmModal";
 
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Administrador",
+  OP_ESTOQUE: "Operador de Estoque",
+  OP_PRODUCAO: "Operador de Produção",
+  // Cadastro feito fora da tela de Usuários: sem acesso até o admin definir o papel
+  PENDENTE: "Pendente (sem acesso)",
+};
+
 export default function UsersConfigPage() {
   const { showToast } = useToast();
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -30,6 +38,7 @@ export default function UsersConfigPage() {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
+      .is("excluido_em", null)
       .order("email", { ascending: true });
     
     if (error) {
@@ -51,20 +60,36 @@ export default function UsersConfigPage() {
         { auth: { persistSession: false } }
       );
 
-      const { error } = await tempSupabase.auth.signUp({
+      const { data: signUpData, error } = await tempSupabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        options: { 
-          data: { 
-            full_name: newUser.full_name, 
-            role: newUser.role 
-          } 
+        options: {
+          data: {
+            full_name: newUser.full_name,
+            role: newUser.role
+          }
         }
       });
 
       if (error) throw error;
-      
-      showToast("Acesso industrial criado com sucesso!");
+
+      // O banco ignora o role do signUp (todo perfil nasce PENDENTE, sem acesso);
+      // o papel escolhido é gravado aqui, com a sessão do admin.
+      const newUserId = signUpData.user?.id;
+      const { data: updated, error: roleError } = newUserId
+        ? await supabase
+            .from("profiles")
+            .update({ full_name: newUser.full_name, role: newUser.role })
+            .eq("id", newUserId)
+            .select("id")
+        : { data: [], error: null };
+
+      if (roleError) throw roleError;
+      if (!updated || updated.length === 0) {
+        showToast("Usuário criado, mas o perfil não foi encontrado. Confira a função dele na edição.", "error");
+      } else {
+        showToast("Acesso industrial criado com sucesso!");
+      }
       setIsCreateModalOpen(false);
       setNewUser({ email: '', password: '', full_name: '', role: 'OP_ESTOQUE' });
       setTimeout(fetchUsers, 1500);
@@ -98,14 +123,14 @@ export default function UsersConfigPage() {
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
     try {
-      // Chama a função RPC que apaga o LOGIN (auth.users) e o PERFIL (public.profiles)
-      const { error } = await supabase.rpc('delete_user_entirely', { 
-        user_id_to_delete: userToDelete.id 
+      // Apaga o LOGIN (auth.users); o perfil fica guardado só para o histórico de produção
+      const { error } = await supabase.rpc("delete_user_keep_history", {
+        p_user_id: userToDelete.id,
       });
 
       if (error) throw error;
 
-      showToast("Login e perfil removidos permanentemente.");
+      showToast("Usuário excluído. O histórico de produção foi mantido.");
       setUserToDelete(null);
       fetchUsers();
     } catch (err: any) {
@@ -162,8 +187,8 @@ export default function UsersConfigPage() {
             <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
               <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 flex-1 md:flex-none justify-center">
                 <Shield size={16} className="text-[#5D286C]" />
-                <span className="text-[10px] font-black uppercase text-gray-500">
-                  {user.role === 'ADMIN' ? 'Administrador' : 'Operador'}
+                <span className={`text-[10px] font-black uppercase ${user.role === 'PENDENTE' ? 'text-amber-600' : 'text-gray-500'}`}>
+                  {ROLE_LABEL[user.role] ?? 'Operador'}
                 </span>
               </div>
               <button 
@@ -195,6 +220,7 @@ export default function UsersConfigPage() {
               <input required type="password" placeholder="Senha de acesso" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
               <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
                 <option value="OP_ESTOQUE">Operador de Estoque</option>
+                <option value="OP_PRODUCAO">Operador de Produção</option>
                 <option value="ADMIN">Administrador</option>
               </select>
               <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl mt-4">
@@ -214,7 +240,9 @@ export default function UsersConfigPage() {
             <form onSubmit={handleUpdateUser} className="space-y-4">
               <input type="text" required value={editingUser?.full_name || ""} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]" />
               <select value={editingUser?.role || "OP_ESTOQUE"} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold outline-none focus:border-[#5D286C]">
+                <option value="PENDENTE" disabled>Pendente (sem acesso)</option>
                 <option value="OP_ESTOQUE">Operador de Estoque</option>
+                <option value="OP_PRODUCAO">Operador de Produção</option>
                 <option value="ADMIN">Administrador</option>
               </select>
               <button disabled={isSubmitting} type="submit" className="w-full bg-[#5D286C] text-white p-5 rounded-2xl font-black shadow-xl mt-4">
@@ -231,7 +259,7 @@ export default function UsersConfigPage() {
         onClose={() => setUserToDelete(null)}
         onConfirm={handleDeleteUser}
         title="Excluir Definitivamente"
-        message={`Deseja remover ${userToDelete?.email}? Isso apagará o login e o perfil permanentemente.`}
+        message={`Deseja excluir ${userToDelete?.full_name || userToDelete?.email}? O acesso será removido permanentemente, mas o histórico de produção, defeitos e movimentações será mantido.`}
       />
     </div>
   );

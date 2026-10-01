@@ -86,17 +86,24 @@ export function sortItemsByReservation<T extends OrderItemWithReservations>(item
   });
 }
 
-async function fetchKitStock(kitId: number): Promise<number> {
-  const { data, error } = await supabase.from("kits").select("estoque_atual").eq("id", kitId).single();
+/**
+ * Ajusta o estoque de um kit de forma atômica no banco (estoque = estoque + delta).
+ * Nunca ler o saldo e gravar um valor absoluto: isso sobrescreve movimentações
+ * feitas por outros operadores no meio-tempo.
+ */
+export async function adjustKitStock(kitId: number, delta: number, clampZero = true): Promise<number> {
+  const { data, error } = await supabase.rpc("adjust_kit_stock", {
+    p_kit_id: kitId,
+    p_delta: delta,
+    p_clamp_zero: clampZero,
+  });
   if (error) throw error;
-  return data?.estoque_atual ?? 0;
+  return data as number;
 }
 
 async function restoreKitStock(kitId: number, qty: number): Promise<void> {
   if (qty <= 0) return;
-  const current = await fetchKitStock(kitId);
-  const { error } = await supabase.from("kits").update({ estoque_atual: current + qty }).eq("id", kitId);
-  if (error) throw error;
+  await adjustKitStock(kitId, qty);
 }
 
 export async function revertOrderReservations(

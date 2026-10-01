@@ -27,7 +27,7 @@ import {
 import { formatDate } from "@/lib/date-utils";
 import { useStuckLoadingRecovery } from "@/lib/use-stuck-loading-recovery";
 import { useAuth } from "@/lib/auth-context";
-import { revertOrderReservations } from "@/lib/order-reservations";
+import { adjustKitStock, revertOrderReservations } from "@/lib/order-reservations";
 
 const STATUSES = ["Pendente", "Concluído", "Entregue"] as const;
 type StatusFilter = (typeof STATUSES)[number];
@@ -266,15 +266,7 @@ function OrdersListContent() {
     try {
       // Repor estoque dos kits
       for (const item of order.order_items || []) {
-        const currentStock = item.kits?.estoque_atual ?? 0;
-        const newStock = currentStock + item.quantidade;
-
-        const { error: kitError } = await supabase
-          .from("kits")
-          .update({ estoque_atual: newStock })
-          .eq("id", item.kit_id);
-
-        if (kitError) throw kitError;
+        await adjustKitStock(item.kit_id, item.quantidade);
       }
 
       // Atualizar pedido: voltar para Pendente e limpar foto
@@ -289,6 +281,10 @@ function OrdersListContent() {
         .eq("id", order.id);
 
       if (error) throw error;
+
+      // As fotos da baixa deixam de valer: a nova baixa anexa as suas
+      const { error: photosError } = await supabase.from("order_photos").delete().eq("order_id", order.id);
+      if (photosError) throw photosError;
 
       showToast("Pedido voltou para Pendente e estoque foi ajustado.");
       setBackToPendingModal({ isOpen: false, order: null });
