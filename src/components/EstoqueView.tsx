@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   Package, Hammer, Loader2, Activity,
   ArrowDownWideNarrow, ArrowUpWideNarrow,
-  Calculator, X, CheckCircle, AlertTriangle, ChevronRight, Search,
+  Calculator, X, CheckCircle, AlertTriangle, ChevronRight, Search, Trash2,
 } from "lucide-react";
 import {
   getDisplayReservedQty,
@@ -75,6 +77,39 @@ export default function EstoqueView() {
   const [calcResult, setCalcResult] = useState<CalcResult | null>(null);
   const [calcSearchTerm, setCalcSearchTerm] = useState("");
   const [calcCodeSortDesc, setCalcCodeSortDesc] = useState(false);
+
+  // Ajuste temporário (só ADMIN): tirar kits do estoque sem devolver as peças
+  const { role } = useAuth();
+  const { showToast } = useToast();
+  const isAdmin = role === "ADMIN";
+  const [removeModal, setRemoveModal] = useState<{ kit: any; qtd: string; motivo: string } | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  async function confirmRemoveKits() {
+    if (!removeModal || removing) return;
+    const qtd = parseInt(removeModal.qtd);
+    const max = removeModal.kit.estoque_atual || 0;
+    if (!Number.isFinite(qtd) || qtd <= 0 || qtd > max) {
+      showToast(`Informe uma quantidade entre 1 e ${max}.`, "error");
+      return;
+    }
+    setRemoving(true);
+    try {
+      const { error } = await supabase.rpc("remove_kit_stock", {
+        p_kit_id: removeModal.kit.id,
+        p_quantidade: qtd,
+        p_motivo: removeModal.motivo.trim() || null,
+      });
+      if (error) throw error;
+      showToast(`${qtd} kit(s) excluído(s) do estoque. As peças não foram devolvidas.`);
+      setRemoveModal(null);
+      await fetchData();
+    } catch (err: any) {
+      showToast(`Erro ao excluir kits: ${err.message}`, "error");
+    } finally {
+      setRemoving(false);
+    }
+  }
 
   useEffect(() => {
     fetchData();
@@ -381,6 +416,17 @@ export default function EstoqueView() {
                     <p className="text-xs font-black text-gray-400 uppercase truncate">{kit.codigo_unico}</p>
                     <p className="text-sm font-black text-[#262626] truncate">{kit.nome_kit}</p>
                   </div>
+                  {isAdmin && (kit.estoque_atual || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setRemoveModal({ kit, qtd: "", motivo: "" })}
+                      title="Excluir kits do estoque (ajuste)"
+                      aria-label={`Excluir kits do estoque: ${kit.nome_kit}`}
+                      className="p-2 rounded-xl text-gray-300 hover:text-red-600 hover:bg-red-50 transition-all shrink-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
                 <div className="pt-3 border-t border-gray-100">
                   <p className="text-2xl font-black text-[#5D286C]">{kit.estoque_atual || 0}</p>
@@ -420,6 +466,93 @@ export default function EstoqueView() {
                 Nenhuma peça avulsa cadastrada
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: excluir kits do estoque (ajuste, só ADMIN) */}
+      {removeModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white w-full sm:max-w-md p-6 rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => setRemoveModal(null)}
+              disabled={removing}
+              aria-label="Fechar"
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600"
+            >
+              <X size={22} />
+            </button>
+            <div>
+              <h2 className="text-xl font-black text-[#262626] flex items-center gap-2">
+                <Trash2 className="text-red-600" size={20} /> Excluir kits do estoque
+              </h2>
+              <p className="text-sm font-bold text-gray-500 mt-1">
+                {removeModal.kit.codigo_unico} · {removeModal.kit.nome_kit}
+              </p>
+              <p className="text-xs font-bold text-gray-400">
+                Em estoque: {removeModal.kit.estoque_atual || 0} unidade(s)
+              </p>
+            </div>
+
+            <div className="bg-red-50 border-2 border-red-100 rounded-2xl p-3 text-sm font-bold text-red-700 flex gap-2">
+              <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+              <span>
+                Serão excluídos <u>somente os kits</u>. As peças (moldes) desses kits <u>não voltam</u> para o estoque.
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-black text-gray-400 uppercase ml-1" htmlFor="remove-kit-qtd">
+                Quantidade a excluir
+              </label>
+              <input
+                id="remove-kit-qtd"
+                type="number"
+                min={1}
+                max={removeModal.kit.estoque_atual || 0}
+                autoFocus
+                value={removeModal.qtd}
+                onChange={(e) => setRemoveModal({ ...removeModal, qtd: e.target.value })}
+                placeholder={`1 a ${removeModal.kit.estoque_atual || 0}`}
+                className="w-full p-4 bg-gray-50 rounded-2xl text-base font-bold outline-none border-2 border-transparent focus:border-[#5D286C]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-black text-gray-400 uppercase ml-1" htmlFor="remove-kit-motivo">
+                Motivo (opcional)
+              </label>
+              <input
+                id="remove-kit-motivo"
+                type="text"
+                maxLength={200}
+                value={removeModal.motivo}
+                onChange={(e) => setRemoveModal({ ...removeModal, motivo: e.target.value })}
+                placeholder="Ex: acerto de inventário"
+                className="w-full p-4 bg-gray-50 rounded-2xl text-base font-bold outline-none border-2 border-transparent focus:border-[#5D286C]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={confirmRemoveKits}
+              disabled={removing || !removeModal.qtd}
+              className="w-full bg-red-600 text-white h-14 rounded-2xl font-black hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {removing ? (
+                <Loader2 className="animate-spin" size={20} />
+              ) : (
+                `Sim, excluir ${parseInt(removeModal.qtd) > 0 ? parseInt(removeModal.qtd) : ""} kit(s)`
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRemoveModal(null)}
+              disabled={removing}
+              className="w-full bg-gray-100 text-gray-600 h-12 rounded-2xl font-black hover:bg-gray-200 transition-all"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}

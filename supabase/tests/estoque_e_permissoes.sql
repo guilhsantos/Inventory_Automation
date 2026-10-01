@@ -249,6 +249,14 @@ begin
   perform pg_temp.ok('Operador não apaga fotos de pedido');
 
   begin
+    perform remove_kit_stock(r.kit, 1, 'teste');
+    raise exception 'FALHOU operador excluiu kits do estoque';
+  exception when others then
+    if sqlerrm like 'FALHOU%' then raise; end if;
+    perform pg_temp.ok('Operador não exclui kits do estoque');
+  end;
+
+  begin
     perform register_material_entry(r.mat, 10, current_date);
     raise exception 'FALHOU operador registrou entrada de material';
   exception when others then
@@ -268,7 +276,7 @@ end $$;
 -- =============================================================== ADMIN
 select pg_temp.como(admin) from ref \gset
 do $$
-declare r ref%rowtype; m0 numeric; hist int;
+declare r ref%rowtype; m0 numeric; hist int; k0 int; pecas0 int;
 begin
   select * into r from ref;
   select estoque_kg into m0 from materials where id = r.mat;
@@ -277,6 +285,26 @@ begin
     raise exception 'FALHOU entrada de material';
   end if;
   perform pg_temp.ok('Admin registra entrada de material');
+
+  -- Baixa manual de kits: tira só o kit, as peças não voltam
+  perform assemble_kit(r.kit, 1, gen_random_uuid());  -- garante ao menos 1 kit em estoque
+  select estoque_atual into k0 from kits where id = r.kit;
+  select sum(m.estoque_atual) into pecas0 from kit_items ki join moldes m on m.id = ki.molde_id where ki.kit_id = r.kit;
+  perform remove_kit_stock(r.kit, 1, 'teste');
+  if (select estoque_atual from kits where id = r.kit) <> k0 - 1 then
+    raise exception 'FALHOU baixa manual não tirou o kit';
+  end if;
+  if (select sum(m.estoque_atual) from kit_items ki join moldes m on m.id = ki.molde_id where ki.kit_id = r.kit) <> pecas0 then
+    raise exception 'FALHOU baixa manual devolveu peças';
+  end if;
+  perform pg_temp.ok('Admin exclui kits do estoque e as peças não voltam');
+  begin
+    perform remove_kit_stock(r.kit, 100000, 'teste');
+    raise exception 'FALHOU baixa maior que o estoque aceita';
+  exception when others then
+    if sqlerrm like 'FALHOU%' then raise; end if;
+    perform pg_temp.ok('Baixa manual não deixa o kit negativo');
+  end;
 
   -- Entrega com data de faturamento: nunca depois do dia da entrega
   begin
