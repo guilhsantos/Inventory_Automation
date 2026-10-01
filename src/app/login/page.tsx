@@ -50,7 +50,10 @@ export default function LoginPage() {
       } else if (profile?.role === 'ADMIN') {
         router.push("/dashboard");
       } else {
-        router.push("/operator/dashboard");
+        // PENDENTE (cadastro ainda não liberado pelo admin) ou perfil excluído
+        await supabase.auth.signOut();
+        setError("Seu acesso ainda não foi liberado. Fale com o administrador.");
+        setLoading(false);
       }
     }
   };

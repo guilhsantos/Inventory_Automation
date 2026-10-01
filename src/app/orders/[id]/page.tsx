@@ -25,7 +25,9 @@ function OrderDetailsInner() {
   const returnUrl = searchParams.get("returnUrl");
   const returnStatus = searchParams.get("returnStatus");
 
-  const safeReturnUrl = returnUrl?.startsWith("/") ? returnUrl : null;
+  // Só caminhos internos: "//site.com" e "/\site.com" levariam para fora do app
+  const safeReturnUrl =
+    returnUrl && /^\/(?![/\\])/.test(returnUrl) ? returnUrl : null;
   const listHref = safeReturnUrl
     ? safeReturnUrl
     : returnStatus && RETURN_STATUSES.includes(returnStatus as (typeof RETURN_STATUSES)[number])

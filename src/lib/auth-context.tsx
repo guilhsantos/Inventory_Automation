@@ -35,17 +35,20 @@ function saveCachedRole(userId: string, role: string) {
   }
 }
 
-/** Perfil de usuário excluído pelo admin (o login foi removido, o perfil ficou para o histórico). */
-const DELETED_PROFILE = "__EXCLUIDO__";
+/**
+ * Sessão sem acesso ao sistema: perfil excluído pelo admin, cadastro ainda
+ * PENDENTE (não liberado) ou login sem perfil.
+ */
+const DELETED_PROFILE = "__SEM_ACESSO__";
 
 async function fetchProfileRoleOnce(userId: string): Promise<"error" | string> {
   const { data, error } = await supabase.from("profiles").select("role, excluido_em").eq("id", userId).single();
   if (error) {
-    if (error.code === "PGRST116") return "OP_ESTOQUE";
+    if (error.code === "PGRST116") return DELETED_PROFILE;
     return "error";
   }
-  if (data?.excluido_em) return DELETED_PROFILE;
-  return data?.role ?? "OP_ESTOQUE";
+  if (data?.excluido_em || !data?.role || data.role === "PENDENTE") return DELETED_PROFILE;
+  return data.role;
 }
 
 async function fetchProfileRoleWithRetry(userId: string, attempts = 4): Promise<string | null> {
@@ -93,7 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Busca role atualizado em background sem bloquear o authLoading
       fetchProfileRoleWithRetry(session.user.id).then((resolved) => {
         if (resolved === DELETED_PROFILE) {
-          // Sessão ainda aberta de um usuário que o admin excluiu
+          // Excluído, pendente de liberação ou sem perfil: encerra a sessão
           void handleLogout();
           return;
         }
