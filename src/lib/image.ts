@@ -1,10 +1,12 @@
 /**
  * Reduz a foto antes do upload (lado maior até `maxSize` px, JPEG).
- * Fotos de celular têm 3–10 MB; comprimidas ficam ~300–600 KB, o que deixa o
- * envio rápido no 4G e converte HEIC (iPhone) para um formato que todo
- * navegador exibe. Se o navegador não conseguir ler a imagem, envia o original.
+ * Fotos de celular têm 1–5 MB; com 1600px / 0.75 ficam ~150–380 KB (média
+ * ~270 KB medida em fotos reais de pedidos, etiquetas continuam legíveis).
+ * O bucket gratuito tem 1 GB, então o tamanho por foto define quanto tempo ele dura.
+ * Também converte HEIC (iPhone) para um formato que todo navegador exibe.
+ * Se o navegador não conseguir ler a imagem, envia o original.
  */
-export async function compressImage(file: File, maxSize = 1920, quality = 0.82): Promise<Blob> {
+export async function compressImage(file: File, maxSize = 1600, quality = 0.75): Promise<Blob> {
   try {
     // from-image: respeita a rotação gravada pela câmera (EXIF)
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
