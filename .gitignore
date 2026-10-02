@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# originais salvos pelo scripts/comprimir-fotos.mjs
+backup-fotos/
